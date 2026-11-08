@@ -1,7 +1,7 @@
 {
   "id": "macorou.home-assistant",
   "name": "Home Assistant",
-  "description": "Affiche ton installation solaire depuis Home Assistant, avec des flux de courant animés. Module non affilié au projet Home Assistant.",
+  "description": "Affiche ton installation solaire depuis Home Assistant : flux de courant animés et bilan du jour. Module non affilié au projet Home Assistant.",
   "author": "Macorou",
   "version": "1.1.0",
   "sdk": "1.0",

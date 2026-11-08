@@ -183,6 +183,31 @@ public sealed class EntityCatalogTests
         Assert.Equal(["sensor.b", "sensor.pv_today", "sensor.daily_x", "sensor.a_total"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
     }
 
+    [Fact]
+    public void Search_Energy_SejourIsNotDaily()
+    {
+        var states = new[]
+        {
+            S("sensor.alpha", "1", "kWh", "Alpha"),
+            S("sensor.compteur_sejour", "1", "kWh", "Compteur séjour"),
+            S("sensor.prod", "1", "kWh", "Production du jour"),
+        };
+
+        Assert.Equal(["sensor.prod", "sensor.alpha", "sensor.compteur_sejour"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
+    }
+
+    [Fact]
+    public void Search_Energy_SejourWithTodayIsStillDaily()
+    {
+        var states = new[]
+        {
+            S("sensor.alpha", "1", "kWh", "Alpha"),
+            S("sensor.sejour_x", "1", "kWh", "Séjour today"),
+        };
+
+        Assert.Equal(["sensor.sejour_x", "sensor.alpha"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
+    }
+
     [Theory]
     [InlineData("battery_soc", "Percent")]
     [InlineData("battery_soc2", "Percent")]

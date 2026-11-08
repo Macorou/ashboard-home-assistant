@@ -63,8 +63,13 @@ internal static class EntityCatalog
         state.Unit is not null && units.Contains(state.Unit, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Le nom ou l'identifiant (déjà normalisés) évoque un total du jour.</summary>
-    private static bool IsDaily(string name, string id) =>
-        new[] { "jour", "journ", "today", "daily" }.Any(word => name.Contains(word, StringComparison.Ordinal) || id.Contains(word, StringComparison.Ordinal));
+    private static bool IsDaily(string name, string id)
+    {
+        // « séjour » (« sejour » sans accent) contient « jour » sans parler du jour : on l'écarte avant de chercher.
+        name = name.Replace("sejour", "", StringComparison.Ordinal);
+        id = id.Replace("sejour", "", StringComparison.Ordinal);
+        return new[] { "jour", "journ", "today", "daily" }.Any(word => name.Contains(word, StringComparison.Ordinal) || id.Contains(word, StringComparison.Ordinal));
+    }
 
     private static string NameOf(HaState state) =>
         string.IsNullOrWhiteSpace(state.FriendlyName) ? state.EntityId : state.FriendlyName.Trim();

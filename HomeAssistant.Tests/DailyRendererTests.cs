@@ -109,17 +109,80 @@ public sealed class DailyRendererTests
         Assert.True(Ink(bitmap, 0, bitmap.Width) > 100);
     }
 
-    [Fact]
-    public async Task Render_HugeNumbers_StayInsideTheCard()
+    private static int InkIn(SKBitmap bitmap, int xFrom, int xTo, int yFrom, int yTo)
+    {
+        var count = 0;
+        for (var y = Math.Max(0, yFrom); y < Math.Min(bitmap.Height, yTo); y++)
+            for (var x = Math.Max(0, xFrom); x < Math.Min(bitmap.Width, xTo); x++)
+                if (bitmap.GetPixel(x, y).Alpha > 0) count++;
+        return count;
+    }
+
+    [Theory]
+    [InlineData("classique")]
+    [InlineData("liquid-glass")]
+    [InlineData("pixel")]
+    public async Task Render_HugeNumbers_Strip_AreReducedToTheirColumn(string theme)
     {
         var (host, probe) = await StartAsync(Sensors("123456.7"), SettingsFor("strip", 6));
         await using var _ = host;
         await WaitUntilAsync(() => ((DailyCard)probe.Module!.Card!).Current is not null);
 
-        using var bitmap = host.Render(new GridSize(4, 1), "classique");
+        using var bitmap = host.Render(new GridSize(4, 1), theme);
+        // La forme (464 × 100) est mise à l'échelle et centrée dans le bitmap, dont la taille dépend du thème.
+        var scale = Math.Min(bitmap.Width / 464f, bitmap.Height / 100f);
+        var ox = (bitmap.Width - 464 * scale) / 2;
+        var oy = (bitmap.Height - 100 * scale) / 2;
         Assert.True(Ink(bitmap, 0, bitmap.Width) > 100);
         Assert.Equal(0, Ink(bitmap, 0, 2));
         Assert.Equal(0, Ink(bitmap, bitmap.Width - 2, bitmap.Width));
+
+        // Le séparateur (trait d'un pixel à x) touche les pixels x - 1 et x : on regarde les deux colonnes de part et d'autre.
+        for (var i = 1; i <= 5; i++)
+        {
+            var x = (int)Math.Round(ox + (4 + i * (456 / 6f)) * scale);
+            Assert.True(InkIn(bitmap, x - 1, x + 1, (int)(oy + 40 * scale), (int)(oy + 70 * scale)) > 0, $"{theme} : séparateur {i} introuvable");
+            Assert.Equal(0, InkIn(bitmap, x - 3, x - 1, (int)(oy + 40 * scale), (int)(oy + 70 * scale)));
+            Assert.Equal(0, InkIn(bitmap, x + 1, x + 3, (int)(oy + 40 * scale), (int)(oy + 70 * scale)));
+        }
+    }
+
+    [Theory]
+    [InlineData("classique")]
+    [InlineData("liquid-glass")]
+    [InlineData("pixel")]
+    public async Task Render_HugeNumbers_List_AreReducedToTheirRow(string theme)
+    {
+        var (host, probe) = await StartAsync(Sensors("98765432123.7"), SettingsFor("list", 6));
+        await using var _ = host;
+        await WaitUntilAsync(() => ((DailyCard)probe.Module!.Card!).Current is not null);
+
+        using var bitmap = host.Render(new GridSize(2, 3), theme);
+        var scale = Math.Min(bitmap.Width / 226f, bitmap.Height / 322f);
+        var ox = (bitmap.Width - 226 * scale) / 2;
+        var oy = (bitmap.Height - 322 * scale) / 2;
+        Assert.True(Ink(bitmap, 0, bitmap.Width) > 100);
+        Assert.Equal(0, Ink(bitmap, 0, (int)(ox + 13 * scale)));
+        Assert.Equal(0, Ink(bitmap, (int)Math.Ceiling(ox + 213 * scale), bitmap.Width));
+
+        // Pour chaque ligne, le bord droit du libellé se mesure sur un rendu à petits nombres (qui restent à droite, après x = 150).
+        // Le nombre garde 8 px de marge devant lui : sans réduction il déborde jusque dans la zone qui suit le libellé.
+        var (smallHost, smallProbe) = await StartAsync(Sensors("1"), SettingsFor("list", 6));
+        await using var __ = smallHost;
+        await WaitUntilAsync(() => ((DailyCard)smallProbe.Module!.Card!).Current is not null);
+        using var small = smallHost.Render(new GridSize(2, 3), theme);
+
+        var rowHeight = (322 - 12) / 6f;
+        for (var row = 0; row < 6; row++)
+        {
+            var top = (int)(oy + (6 + rowHeight * row) * scale) + 3;
+            var bottom = (int)(oy + (6 + rowHeight * (row + 1)) * scale) - 3;
+            var labelEnd = 0;
+            for (var x = 0; x < ox + 150 * scale; x++)
+                if (InkIn(small, x, x + 1, top, bottom) > 0) labelEnd = x;
+            Assert.True(labelEnd > ox + 39 * scale, $"{theme} ligne {row} : libellé introuvable");
+            Assert.Equal(0, InkIn(bitmap, labelEnd + 1, labelEnd + 5, top, bottom));
+        }
     }
 
     [Fact]

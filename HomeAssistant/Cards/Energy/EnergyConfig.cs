@@ -55,7 +55,7 @@ internal sealed record EnergyConfig(LayoutKind Layout, HouseStyle House, string 
             gridExport = SettingsReader.EntityId(settings, "grid_export");
             if (gridImport.Length == 0)
             {
-                problem = "Choisis le capteur d'achat du réseau dans les réglages de la case.";
+                problem = "Choisis le capteur réseau, celui de l'achat, dans les réglages de la case.";
                 return false;
             }
             if (gridExport.Length == 0)
