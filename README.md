@@ -4,7 +4,7 @@
   <img src="docs/images/carte-soleil.png" alt="La carte Flux d'énergie en plein soleil : les panneaux alimentent la maison et la batterie, et le surplus part vers le réseau." width="700">
 </p>
 
-Un module pour **Ashboard Vision**, le logiciel de l'écran Thermalright Trofeo Vision. Il lit ton installation dans **Home Assistant** et affiche ce qui se passe dans ton installation solaire : la production des panneaux, ta consommation, ce que tu achètes ou vends au réseau, et ta batterie si tu en as une. Les flux de courant sont dessinés et animés entre les panneaux, la maison et le réseau.
+Un module pour **Ashboard Vision**, le logiciel de l'écran Thermalright Trofeo Vision. Il lit ton installation dans **Home Assistant** et affiche ce qui se passe dans ton installation solaire : la production des panneaux, ta consommation, ce que tu achètes ou vends au réseau, et ta batterie si tu en as une. Les flux de courant sont dessinés et animés entre les panneaux, la maison et le réseau. Il affiche aussi un **bilan du jour** : ta consommation, ta production, ce que tu achètes et vends, ce que ça coûte, et le gain de la revente.
 
 Le module **ne fait que lire** Home Assistant. Il n'envoie aucune commande et n'écrit rien dans ta configuration.
 
@@ -12,24 +12,38 @@ Le module **ne fait que lire** Home Assistant. Il n'envoie aucune commande et n'
 
 ## Ce qu'il affiche
 
+Chaque case affiche l'une de ces deux cartes, au choix :
+
+- La carte **Flux d'énergie** : les panneaux, la maison, le réseau et, si tu en as une, la batterie.
+- La carte **Bilan du jour** : les totaux de la journée, en bande ou en liste. Voir la section [Bilan du jour](#bilan-du-jour).
+
 | Maison à gauche, sans batterie | Maison en bas, avec batterie | La nuit, sur batterie |
 |:---:|:---:|:---:|
 | ![Disposition maison à gauche, style traditionnel, sans batterie.](docs/images/carte-maison-gauche.png) | ![Disposition maison en bas, style contemporain, avec batterie.](docs/images/carte-maison-bas.png) | ![La carte la nuit : la production est nulle.](docs/images/carte-nuit.png) |
 
 *Images rendues par le module, avec des valeurs d'exemple.*
 
-- La carte **Flux d'énergie** : les panneaux, la maison, le réseau et, si tu en as une, la batterie.
+| Bilan du jour, en bande | Bilan du jour, en liste |
+|:---:|:---:|
+| ![Bilan du jour en bande, une ligne, avec des valeurs d'exemple.](docs/images/carte-bilan-bande.png) | ![Bilan du jour en liste, en hauteur, avec des valeurs d'exemple.](docs/images/carte-bilan-liste.png) |
+
+*Images rendues par le module, avec des valeurs d'exemple.*
+
+Pour la carte Flux d'énergie :
+
 - Trois dispositions : pointe du triangle en haut, maison à gauche, ou maison en bas.
 - Deux styles de maison : contemporaine ou traditionnelle.
-- Trois thèmes : classique, liquid-glass et pixel.
-- Trois tailles : 5 × 3 (minimum et compacte), 6 × 4 (idéale) et 8 × 4 (grande).
+- Trois thèmes, pour les deux cartes : classique, liquid-glass et pixel.
+- Trois tailles : 5 × 3 (minimum et compacte), 6 × 4 (idéale) et 8 × 4 (grande). Cette carte a besoin d'au moins 5 × 3. Le bilan du jour accepte des cases plus petites.
 
 ## Ce qu'il ne fait pas
 
 - Il ne pilote rien : pas de commande, pas d'écriture dans Home Assistant.
 - Il ne lit pas la configuration Énergie de Home Assistant. Tu indiques toi-même les capteurs à utiliser.
 - Il ne prend pas en charge Home Assistant installé **sur le même PC** que l'application. Pour ce cas, l'adresse `localhost` ou `127.0.0.1` est refusée, avec un message qui te l'explique.
-- Pour l'instant, il n'y a qu'une seule carte. D'autres viendront plus tard.
+- Il ne trace ni graphique ni historique : le bilan montre les totaux d'aujourd'hui, pas leur évolution.
+- Il ne calcule pas le coût à partir d'un tarif : le coût vient d'un capteur que tu choisis.
+- Il ne remet pas les totaux du jour à zéro : c'est Home Assistant qui le fait.
 
 ## Installer le module
 
@@ -60,9 +74,9 @@ Si tu te connectes en `https` à une adresse privée (réseau local, `.local`, `
 
 ### Affichage et disposition
 
-- **Affichage** : « Flux d'énergie », pour l'instant le seul choix.
-- **Disposition** : pointe en haut (par défaut), maison à gauche ou maison en bas.
-- **Style de maison** : contemporaine (par défaut) ou traditionnelle.
+- **Affichage** : « Flux d'énergie » (par défaut) ou « Bilan du jour ». Le bilan a ses propres réglages, décrits dans la section [Bilan du jour](#bilan-du-jour).
+- **Disposition** : pointe en haut (par défaut), maison à gauche ou maison en bas. Pour la carte Flux d'énergie seulement.
+- **Style de maison** : contemporaine (par défaut) ou traditionnelle. Pour la carte Flux d'énergie seulement.
 
 ### Capteurs
 
@@ -73,7 +87,7 @@ Tous les capteurs se choisissent dans une liste : tape quelques lettres de leur 
 **Réseau**, avec deux formats au choix :
 
 - **Un seul capteur** (par défaut) : il est positif quand tu **achètes** du courant. Si le tien est positif quand tu **vends**, coche « Positif à la vente ».
-- **Deux capteurs, achat et vente** : un capteur pour l'achat, un pour la vente. Leurs valeurs sont toujours positives.
+- **Deux capteurs, achat et vente** : « Capteur réseau » est celui de l'achat, et « Capteur de vente » est l'autre. Leurs valeurs sont toujours positives. Si tu avais rempli l'ancien champ d'achat, il continue de marcher tant que « Capteur réseau » est vide.
 
 **Consommation (facultatif)** : si tu n'en choisis pas, le module la calcule à partir de la production, du réseau et de la batterie. Si tu en choisis un, c'est lui qui compte.
 
@@ -92,6 +106,51 @@ Dans les deux cas, tu peux ajouter le **niveau de la batterie, en %**. Sans lui,
 - Une clé refusée (401) te demande de refaire une clé API. Un capteur introuvable (404) est signalé par son nom.
 
 Une case sans réglage, ou dont un capteur obligatoire est vide, reste « non configurée » : le module ne tente aucune connexion et te dit quel champ remplir.
+
+## Bilan du jour
+
+La carte **Bilan du jour** montre les totaux de la journée, en petit. Choisis-la dans **Affichage**, puis choisis sa forme.
+
+### Forme et tailles
+
+- **Bande, une ligne** (par défaut) : une colonne par valeur, avec l'icône, le nombre et le nom. Elle demande au moins 4 × 1.
+- **Liste, en hauteur** : une ligne par valeur, avec l'icône, le nom, et le nombre à droite. Elle demande au moins 2 × 3.
+
+Si la case est plus petite que la forme choisie, elle affiche un court message qui te dit la taille minimale.
+
+### Valeurs et ordre
+
+Le réglage « Valeurs à afficher et ordre » te laisse cocher les valeurs à voir, et les ranger dans l'ordre qui te plaît. Les six sont cochées par défaut, dans cet ordre :
+
+- **Consommation** et **production** ;
+- **Import** (ce que tu achètes au réseau) et **export** (ce que tu vends) ;
+- **Coût** ;
+- **Gain de revente**.
+
+Une valeur non cochée n'apparaît pas. Si aucune valeur cochée n'a de capteur, la case reste « non configurée » et te demande d'en choisir un.
+
+### Capteurs
+
+Chaque valeur a son capteur, à choisir dans la liste :
+
+- les capteurs de consommation, de production, d'import et d'export **du jour** : des capteurs d'énergie, en Wh, kWh ou MWh (convertis en kWh) ;
+- le capteur de coût **du jour** : un capteur monétaire, en € ou EUR.
+
+Un capteur d'énergie sans unité est lu comme des kWh. Dans la liste, les capteurs dont le nom ou l'identifiant contient « jour », « today » ou « daily » passent en premier, et chaque proposition affiche sa valeur actuelle : vérifie-la avant de valider.
+
+Ces capteurs doivent donner des **totaux du jour**, qui repartent de zéro tout seuls chaque jour. C'est Home Assistant qui les remet à zéro, pas le module. Un compteur qui ne s'arrête jamais ne convient pas.
+
+### Gain de revente
+
+Le gain de revente vaut l'export du jour multiplié par le prix de revente. Il a donc besoin du capteur d'export du jour. Choisis le prix dans « Prix de revente » :
+
+- **Aucun** (par défaut) : pas de gain. La valeur n'apparaît pas, même cochée.
+- **Saisi** : tape ton prix en €/kWh, par exemple `0,13` ou `0.13`. Un prix de 0 est accepté et donne un gain de 0,00 €. Un prix vide, invalide ou négatif fait afficher un tiret à la place du gain.
+- **Capteur Home Assistant** : choisis le capteur du prix. Il accepte `€/kWh`, `EUR/kWh` et `c€/kWh` (converti en euros). Sans unité, le prix est lu comme des €/kWh.
+
+### Lecture
+
+Le bilan relit ses capteurs toutes les 30 secondes. Une valeur dont le capteur est « indisponible » ou « inconnu », ou qui n'est pas un nombre, affiche un tiret à sa place, sans faire passer la carte hors ligne. Les autres erreurs (clé refusée, capteur introuvable, échecs répétés) se comportent comme pour la carte Flux d'énergie, décrites dans « Ce qui se passe quand un capteur ne répond pas ».
 
 ## Permissions
 
