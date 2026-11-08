@@ -204,6 +204,46 @@ public sealed class ModuleStartupTests
     }
 
     [Fact]
+    public async Task Start_DailyDisplay_CreatesDailyCard()
+    {
+        var ha = new FakeHomeAssistant();
+        var probe = new TestableModule.Holder();
+        TestableModule.Probe.Value = probe;
+        await using var host = Host(ha, "192.168.1.10:8123", "jeton", """{ "display": "daily", "day_consumption": { "id": "sensor.conso" } }""");
+
+        await host.StartAsync();
+
+        Assert.IsType<DailyCard>(probe.Module!.Card);
+    }
+
+    [Fact]
+    public async Task Start_DailyWithoutSensor_IsNotConfigured()
+    {
+        var ha = new FakeHomeAssistant();
+        await using var host = Host(ha, "192.168.1.10:8123", "jeton", """{ "display": "daily" }""");
+
+        await host.StartAsync();
+
+        Assert.Equal(ModuleHealth.NotConfigured, host.Health);
+        Assert.Equal("Choisis au moins un capteur pour le Bilan du jour.", host.StatusMessage);
+        Assert.Empty(ha.Requests);
+    }
+
+    [Fact]
+    public async Task Start_NoDisplaySetting_StaysEnergy()
+    {
+        var ha = new FakeHomeAssistant();
+        var probe = new TestableModule.Holder();
+        TestableModule.Probe.Value = probe;
+        await using var host = Host(ha, "192.168.1.10:8123", "jeton",
+            """{ "solar": { "id": "sensor.pv" }, "grid": { "id": "sensor.grid" } }""");
+
+        await host.StartAsync();
+
+        Assert.IsType<EnergyCard>(probe.Module!.Card);
+    }
+
+    [Fact]
     public async Task Start_LocalhostAddress_ExplainsItIsNotSupported()
     {
         var ha = new FakeHomeAssistant();

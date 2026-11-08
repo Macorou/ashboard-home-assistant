@@ -34,19 +34,37 @@ public class HomeAssistantModule : CommunityModule
             return Task.CompletedTask;
         }
 
-        if (!EnergyConfig.TryRead(Services.Settings, out var config, out var configProblem))
+        var display = SettingsReader.Choice(Services.Settings, "display", "energy", "energy", "daily");
+        var context = new CardContext(Services, client, Invalidate, (health, message) => SetStatus(health, message));
+        if (!TryCreateCard(display, context, out var card, out var configProblem))
         {
             client.Dispose();
             SetStatus(ModuleHealth.NotConfigured, configProblem);
             return Task.CompletedTask;
         }
 
-        // Une seule carte existe pour l'instant ; le réglage garde la place des suivantes.
-        _ = SettingsReader.Choice(Services.Settings, "display", "energy", "energy");
-        var card = new EnergyCard(new CardContext(Services, client, Invalidate, (health, message) => SetStatus(health, message)), config!);
         _card = card;
-        card.Start();
+        card!.Start();
         return Task.CompletedTask;
+    }
+
+    /// <summary>Construit la carte choisie, ou rend false avec le message qui dit quoi régler.</summary>
+    private bool TryCreateCard(string display, CardContext context, out PollingCard? card, out string? problem)
+    {
+        card = null;
+        if (display == "daily")
+        {
+            if (DailyConfig.TryRead(Services.Settings, out var daily, out problem))
+            {
+                card = new DailyCard(context, daily!);
+            }
+        }
+        else if (EnergyConfig.TryRead(Services.Settings, out var energy, out problem))
+        {
+            card = new EnergyCard(context, energy!);
+        }
+
+        return card is not null;
     }
 
     /// <summary>
