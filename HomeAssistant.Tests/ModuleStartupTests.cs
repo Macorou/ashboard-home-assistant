@@ -98,4 +98,57 @@ public sealed class ModuleStartupTests
         Assert.Contains("permission", host.StatusMessage);
         Assert.Empty(ha.Requests);
     }
+
+    [Fact]
+    public async Task Start_PrivateIpWithoutLocalNetwork_SaysToTickIt()
+    {
+        var ha = new FakeHomeAssistant();
+        await using var host = Host(ha, "192.168.1.10:8123", "jeton", SolarSetting, granted: [ModulePermission.Internet]);
+
+        await host.StartAsync();
+
+        Assert.Equal(ModuleHealth.NotConfigured, host.Health);
+        Assert.Contains("Réseau local", host.StatusMessage);
+        Assert.Empty(ha.Requests);
+    }
+
+    [Fact]
+    public async Task Start_PublicIpWithoutInternet_SaysToTickIt()
+    {
+        var ha = new FakeHomeAssistant();
+        await using var host = Host(ha, "https://8.8.8.8", "jeton", SolarSetting, granted: [ModulePermission.LocalNetwork]);
+
+        await host.StartAsync();
+
+        Assert.Equal(ModuleHealth.NotConfigured, host.Health);
+        Assert.Contains("Internet", host.StatusMessage);
+        Assert.Empty(ha.Requests);
+    }
+
+    [Fact]
+    public async Task Start_HostnameWithOnePermission_TriesToConnect()
+    {
+        // Aucune connexion n'existe avant la tâche 7 : on vérifie seulement que la permission a passé, le module s'arrête au capteur.
+        var ha = new FakeHomeAssistant();
+        await using var host = Host(ha, "https://maison.duckdns.org", "jeton", granted: [ModulePermission.Internet]);
+
+        await host.StartAsync();
+
+        Assert.Equal(ModuleHealth.NotConfigured, host.Health);
+        Assert.Contains("production", host.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Start_HostnameWithoutPermission_SaysToTickOne()
+    {
+        var ha = new FakeHomeAssistant();
+        await using var host = Host(ha, "https://maison.duckdns.org", "jeton", SolarSetting, granted: []);
+
+        await host.StartAsync();
+
+        Assert.Equal(ModuleHealth.NotConfigured, host.Health);
+        Assert.Contains("Réseau local", host.StatusMessage);
+        Assert.Contains("Internet", host.StatusMessage);
+        Assert.Empty(ha.Requests);
+    }
 }

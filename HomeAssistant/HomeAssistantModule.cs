@@ -27,16 +27,22 @@ public class HomeAssistantModule : CommunityModule
             return Task.CompletedTask;
         }
 
-        // Provisoire : la Task 2 remplace ce contrôle par la normalisation complète de l'adresse.
-        if (url.Contains("localhost", StringComparison.OrdinalIgnoreCase) || url.Contains("127.0.0.1", StringComparison.Ordinal))
+        if (!HaAddress.TryParse(url, out var address))
+        {
+            SetStatus(ModuleHealth.NotConfigured, "L'adresse de Home Assistant n'est pas valide : écris-la comme 192.168.1.10:8123 ou https://maison.exemple.fr.");
+            return Task.CompletedTask;
+        }
+
+        if (address.IsLocalhost)
         {
             SetStatus(ModuleHealth.NotConfigured, "Une adresse localhost n'est pas prise en charge : indique l'adresse réseau de ton Home Assistant, par exemple 192.168.1.10:8123.");
             return Task.CompletedTask;
         }
 
-        if (!Services.Has(ModulePermission.LocalNetwork) && !Services.Has(ModulePermission.Internet))
+        var permissionMessage = MissingPermissionMessage(address);
+        if (permissionMessage is not null)
         {
-            SetStatus(ModuleHealth.NotConfigured, "Accorde la permission « Réseau local » ou « Internet » à ce module dans la fenêtre de réglage d'Ashboard Vision.");
+            SetStatus(ModuleHealth.NotConfigured, permissionMessage);
             return Task.CompletedTask;
         }
 
@@ -46,6 +52,29 @@ public class HomeAssistantModule : CommunityModule
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Le message qui dit quelle permission cocher, ou null si l'adresse est accessible. Une IP privée demande « Réseau local », une IP
+    /// publique « Internet » ; un nom d'hôte ne dit pas où il mène, il suffit donc d'une des deux.
+    /// </summary>
+    private string? MissingPermissionMessage(HaAddress address)
+    {
+        const string LocalNetworkMessage = "Accorde la permission « Réseau local » à ce module dans la fenêtre de réglage d'Ashboard Vision : l'adresse est sur ton réseau.";
+        const string InternetMessage = "Accorde la permission « Internet » à ce module dans la fenêtre de réglage d'Ashboard Vision : l'adresse est sur Internet.";
+        const string EitherMessage = "Accorde la permission « Réseau local » ou « Internet » à ce module dans la fenêtre de réglage d'Ashboard Vision.";
+
+        if (address.IsIpLiteral)
+        {
+            if (address.IsPrivate)
+            {
+                return Services.Has(ModulePermission.LocalNetwork) ? null : LocalNetworkMessage;
+            }
+
+            return Services.Has(ModulePermission.Internet) ? null : InternetMessage;
+        }
+
+        return Services.Has(ModulePermission.LocalNetwork) || Services.Has(ModulePermission.Internet) ? null : EitherMessage;
     }
 
     /// <summary>Rien à dessiner tant que les cartes ne sont pas branchées : le logiciel affiche lui-même le message d'état.</summary>
