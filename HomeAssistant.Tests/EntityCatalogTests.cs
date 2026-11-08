@@ -119,11 +119,81 @@ public sealed class EntityCatalogTests
         Assert.Equal(["sensor.a", "sensor.b"], Ids(EntityCatalog.Search(states, EntityKind.Power, "  ")));
     }
 
+    [Fact]
+    public void Search_Energy_KeepsOnlyEnergyUnits()
+    {
+        var states = new[]
+        {
+            S("sensor.a", "1", "Wh", "A"),
+            S("sensor.b", "1", "kWh", "B"),
+            S("sensor.c", "1", "MWh", "C"),
+            S("sensor.d", "1", "W", "D"),
+            S("sensor.e", "1", "€", "E"),
+        };
+
+        Assert.Equal(["sensor.a", "sensor.b", "sensor.c"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
+    }
+
+    [Fact]
+    public void Search_Energy_IgnoresUnitCase()
+    {
+        Assert.Equal(["sensor.a"], Ids(EntityCatalog.Search([S("sensor.a", "1", "KWH", "A")], EntityKind.Energy, "")));
+    }
+
+    [Fact]
+    public void Search_Money_KeepsMonetary()
+    {
+        var states = new[]
+        {
+            S("sensor.a", "1", "USD", "A", "monetary"),
+            S("sensor.b", "1", "€", "B"),
+            S("sensor.c", "1", "EUR", "C"),
+            S("sensor.d", "1", "EUR/kWh", "D"),
+            S("sensor.e", "1", "kWh", "E"),
+        };
+
+        Assert.Equal(["sensor.a", "sensor.b", "sensor.c"], Ids(EntityCatalog.Search(states, EntityKind.Money, "")));
+    }
+
+    [Fact]
+    public void Search_Price_KeepsPerKwh()
+    {
+        var states = new[]
+        {
+            S("sensor.a", "1", "€/kWh", "A"),
+            S("sensor.b", "1", "EUR/kWh", "B"),
+            S("sensor.c", "1", "c€/kWh", "C"),
+            S("sensor.d", "1", "€", "D"),
+        };
+
+        Assert.Equal(["sensor.a", "sensor.b", "sensor.c"], Ids(EntityCatalog.Search(states, EntityKind.Price, "")));
+    }
+
+    [Fact]
+    public void Search_Energy_RanksDailyFirst()
+    {
+        var states = new[]
+        {
+            S("sensor.a_total", "1", "kWh", "Compteur total"),
+            S("sensor.b", "1", "kWh", "Production du jour"),
+            S("sensor.pv_today", "1", "kWh", "Solaire"),
+            S("sensor.daily_x", "1", "kWh", "Zeta"),
+        };
+
+        Assert.Equal(["sensor.b", "sensor.pv_today", "sensor.daily_x", "sensor.a_total"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
+    }
+
     [Theory]
-    [InlineData("battery_soc", true)]
-    [InlineData("battery_soc2", true)]
-    [InlineData("solar", false)]
-    [InlineData("battery_charge", false)]
-    public void KindFor_MapsFields(string key, bool percent) =>
-        Assert.Equal(percent ? EntityKind.Percent : EntityKind.Power, EntityCatalog.KindFor(key));
+    [InlineData("battery_soc", "Percent")]
+    [InlineData("battery_soc2", "Percent")]
+    [InlineData("solar", "Power")]
+    [InlineData("battery_charge", "Power")]
+    [InlineData("day_consumption", "Energy")]
+    [InlineData("day_production", "Energy")]
+    [InlineData("day_import", "Energy")]
+    [InlineData("day_export", "Energy")]
+    [InlineData("day_cost", "Money")]
+    [InlineData("day_price_sensor", "Price")]
+    public void KindFor_MapsFields(string key, string kind) =>
+        Assert.Equal(Enum.Parse<EntityKind>(kind), EntityCatalog.KindFor(key));
 }

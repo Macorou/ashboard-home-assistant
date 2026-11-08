@@ -9,7 +9,7 @@
   "permissions": [ "reseau-local", "internet" ],
   "repository": "Macorou/ashboard-home-assistant",
   "icon": "icon.png",
-  "minSize": { "columns": 5, "rows": 3 },
+  "minSize": { "columns": 2, "rows": 1 },
   "presets": {
     "compact": { "columns": 5, "rows": 3 },
     "ideal": { "columns": 6, "rows": 4 },
@@ -22,8 +22,77 @@
     { "kind": "action", "key": "forget_cert", "label": "Oublier le certificat", "confirm": "Oublier le certificat de Home Assistant mémorisé ? Il sera appris de nouveau à la prochaine connexion." },
     {
       "kind": "choice", "key": "display", "label": "Affichage",
-      "options": [ { "value": "energy", "label": "Flux d'énergie" } ],
+      "options": [
+        { "value": "energy", "label": "Flux d'énergie" },
+        { "value": "daily", "label": "Bilan du jour" }
+      ],
       "default": "energy"
+    },
+    {
+      "kind": "choice", "key": "day_shape", "label": "Forme",
+      "options": [
+        { "value": "strip", "label": "Bande, une ligne" },
+        { "value": "list", "label": "Liste, en hauteur" }
+      ],
+      "default": "strip",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "list", "key": "day_values", "label": "Valeurs à afficher et ordre",
+      "options": [
+        { "value": "consumption", "label": "Consommation" },
+        { "value": "production", "label": "Production" },
+        { "value": "import", "label": "Import" },
+        { "value": "export", "label": "Export" },
+        { "value": "cost", "label": "Coût" },
+        { "value": "resale", "label": "Gain de revente" }
+      ],
+      "default": [ "consumption", "production", "import", "export", "cost", "resale" ],
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_consumption", "label": "Capteur de consommation du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_production", "label": "Capteur de production du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_import", "label": "Capteur d'import du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_export", "label": "Capteur d'export du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_cost", "label": "Capteur de coût du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "choice", "key": "day_price_mode", "label": "Prix de revente",
+      "options": [
+        { "value": "none", "label": "Aucun" },
+        { "value": "typed", "label": "Saisi" },
+        { "value": "sensor", "label": "Capteur Home Assistant" }
+      ],
+      "default": "none",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "text", "key": "day_price", "label": "Prix de revente, en €/kWh", "placeholder": "0,13", "maxLength": 12,
+      "visibleWhen": { "key": "day_price_mode", "value": "typed" }
+    },
+    {
+      "kind": "lookup", "key": "day_price_sensor", "label": "Capteur du prix de revente", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "day_price_mode", "value": "sensor" }
     },
     {
       "kind": "choice", "key": "layout", "label": "Disposition",
@@ -62,17 +131,13 @@
     {
       "kind": "lookup", "key": "grid", "label": "Capteur réseau", "labelPath": "name",
       "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
-      "visibleWhen": { "key": "grid_mode", "value": "one" }
+      "help": "Avec deux capteurs, c'est celui de l'achat.",
+      "visibleWhen": { "key": "display", "value": "energy" }
     },
     {
       "kind": "toggle", "key": "grid_inverted", "label": "Positif à la vente", "default": false,
-      "help": "Laisse décoché si ton capteur est positif quand tu achètes du courant.",
-      "visibleWhen": { "key": "grid_mode", "value": "one" }
-    },
-    {
-      "kind": "lookup", "key": "grid_import", "label": "Capteur d'achat", "labelPath": "name",
-      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
-      "visibleWhen": { "key": "grid_mode", "value": "two" }
+      "help": "Laisse décoché si ton capteur est positif quand tu achètes du courant. Ne sert qu'avec un seul capteur.",
+      "visibleWhen": { "key": "display", "value": "energy" }
     },
     {
       "kind": "lookup", "key": "grid_export", "label": "Capteur de vente", "labelPath": "name",

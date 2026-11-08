@@ -45,7 +45,13 @@ internal sealed record EnergyConfig(LayoutKind Layout, HouseStyle House, string 
         var gridInverted = false;
         if (gridTwo)
         {
-            gridImport = SettingsReader.EntityId(settings, "grid_import");
+            // « grid » est le capteur d'achat affiché à l'écran ; « grid_import » est l'ancien champ, lu pour les cases déjà configurées.
+            gridImport = SettingsReader.EntityId(settings, "grid");
+            if (gridImport.Length == 0)
+            {
+                gridImport = SettingsReader.EntityId(settings, "grid_import");
+            }
+
             gridExport = SettingsReader.EntityId(settings, "grid_export");
             if (gridImport.Length == 0)
             {

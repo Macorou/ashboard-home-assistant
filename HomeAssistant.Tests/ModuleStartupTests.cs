@@ -40,11 +40,95 @@ public sealed class ModuleStartupTests
         var presets = root.GetProperty("presets");
 
         Assert.Equal("macorou.home-assistant", root.GetProperty("id").GetString());
-        Assert.Equal((5, 3), Size(root.GetProperty("minSize")));
+        Assert.Equal((2, 1), Size(root.GetProperty("minSize")));
         Assert.Equal((5, 3), Size(presets.GetProperty("compact")));
         Assert.Equal((6, 4), Size(presets.GetProperty("ideal")));
         Assert.Equal((8, 4), Size(presets.GetProperty("large")));
         Assert.Equal(["reseau-local", "internet"], root.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()!).ToArray());
+    }
+
+    private static JsonElement[] ManifestFields(JsonDocument manifest) =>
+        manifest.RootElement.GetProperty("settings").EnumerateArray().ToArray();
+
+    private static JsonElement Field(JsonElement[] fields, string key) =>
+        Assert.Single(fields, f => f.GetProperty("key").GetString() == key);
+
+    private static void AssertVisibleWhen(JsonElement field, string key, string value)
+    {
+        var rule = field.GetProperty("visibleWhen");
+        Assert.Equal(key, rule.GetProperty("key").GetString());
+        Assert.Equal(value, rule.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public void Manifest_DailyFields_OnlyShowForDaily()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var fields = ManifestFields(manifest);
+
+        var daily = fields.Where(f => f.GetProperty("key").GetString()!.StartsWith("day_", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(10, daily.Length);
+        foreach (var field in daily)
+        {
+            var key = field.GetProperty("key").GetString();
+            if (key is "day_price" or "day_price_sensor")
+            {
+                continue;
+            }
+
+            AssertVisibleWhen(field, "display", "daily");
+        }
+
+        AssertVisibleWhen(Field(fields, "day_price"), "day_price_mode", "typed");
+        AssertVisibleWhen(Field(fields, "day_price_sensor"), "day_price_mode", "sensor");
+        Assert.Equal(12, Field(fields, "day_price").GetProperty("maxLength").GetInt32());
+        Assert.Equal("0,13", Field(fields, "day_price").GetProperty("placeholder").GetString());
+    }
+
+    [Fact]
+    public void Manifest_DailyFields_FollowDisplayInOrder()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var keys = ManifestFields(manifest).Select(f => f.GetProperty("key").GetString()!).ToList();
+
+        var start = keys.IndexOf("display") + 1;
+        Assert.Equal(
+            ["day_shape", "day_values", "day_consumption", "day_production", "day_import", "day_export", "day_cost", "day_price_mode", "day_price", "day_price_sensor"],
+            keys.GetRange(start, 10));
+    }
+
+    [Fact]
+    public void Manifest_DisplayOffersDaily()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var display = Field(ManifestFields(manifest), "display");
+
+        Assert.Equal(["energy", "daily"], display.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("value").GetString()!).ToArray());
+        Assert.Equal("energy", display.GetProperty("default").GetString());
+    }
+
+    [Fact]
+    public void Manifest_DayValues_IsAnOrderedListOfSix()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var field = Field(ManifestFields(manifest), "day_values");
+
+        Assert.Equal("list", field.GetProperty("kind").GetString());
+        var expected = new[] { "consumption", "production", "import", "export", "cost", "resale" };
+        Assert.Equal(expected, field.GetProperty("default").EnumerateArray().Select(v => v.GetString()!).ToArray());
+        Assert.Equal(expected, field.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("value").GetString()!).ToArray());
+    }
+
+    [Fact]
+    public void Manifest_GridFields_FollowDisplay()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var fields = ManifestFields(manifest);
+
+        AssertVisibleWhen(Field(fields, "grid"), "display", "energy");
+        AssertVisibleWhen(Field(fields, "grid_inverted"), "display", "energy");
+        AssertVisibleWhen(Field(fields, "grid_export"), "grid_mode", "two");
+        Assert.DoesNotContain(fields, f => f.GetProperty("key").GetString() == "grid_import");
     }
 
     [Fact]

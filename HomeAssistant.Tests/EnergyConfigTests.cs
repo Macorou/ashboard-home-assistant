@@ -100,13 +100,38 @@ public sealed class EnergyConfigTests
     public void EntityIds_NoDuplicates_OnlyActiveMode()
     {
         var json = $$"""
-            {"solar":{{Entity("sensor.pv")}},"grid_mode":"two","grid_import":{{Entity("sensor.imp")}},"grid_export":{{Entity("sensor.exp")}},
-             "grid":{{Entity("sensor.ignored")}},"home":{{Entity("sensor.pv")}},"battery_mode":"one","battery":{{Entity("sensor.bat")}},
+            {"solar":{{Entity("sensor.pv")}},"grid_mode":"two","grid":{{Entity("sensor.imp")}},"grid_export":{{Entity("sensor.exp")}},
+             "home":{{Entity("sensor.pv")}},"battery_mode":"one","battery":{{Entity("sensor.bat")}},
              "battery_charge":{{Entity("sensor.ignored2")}}}
             """;
 
         Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
 
         Assert.Equal(["sensor.bat", "sensor.exp", "sensor.imp", "sensor.pv"], config!.EntityIds.Order().ToArray());
+    }
+
+    [Fact]
+    public void TryRead_TwoSensors_GridIsThePurchaseSensor()
+    {
+        var json = $$"""
+            {"solar":{{Entity("sensor.pv")}},"grid_mode":"two","grid":{{Entity("sensor.ignored")}},"grid_import":{{Entity("sensor.imp")}},
+             "grid_export":{{Entity("sensor.exp")}}}
+            """;
+
+        Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal("sensor.ignored", config!.GridImport);
+        Assert.Equal("", config.Grid);
+        Assert.False(config.GridInverted);
+    }
+
+    [Fact]
+    public void TryRead_TwoSensors_FallsBackOnLegacyGridImport()
+    {
+        var json = $$"""{"solar":{{Entity("sensor.pv")}},"grid_mode":"two","grid_import":{{Entity("sensor.imp")}},"grid_export":{{Entity("sensor.exp")}}}""";
+
+        Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal("sensor.imp", config!.GridImport);
     }
 }
