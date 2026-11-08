@@ -8,6 +8,9 @@ internal sealed record EnergySnapshot(EnergyInput Input, double? BatterySocPerce
 /// <summary>Transforme les états Home Assistant en entrées du calcul des flux (spec § 6).</summary>
 internal static class EnergyReader
 {
+    /// <summary>La valeur numérique de l'état, sans conversion d'unité ; null si l'état n'est pas un nombre fini.</summary>
+    internal static double? Number(HaState? state) => TryNumber(state, out var value) ? value : null;
+
     /// <summary>La puissance en W ; null si l'état n'est pas un nombre fini (<c>unavailable</c>, <c>unknown</c>, vide, texte, <c>NaN</c>).</summary>
     internal static double? Watts(HaState? state)
     {
