@@ -23,6 +23,29 @@ internal static class SettingsReader
         return Array.IndexOf(allowed, text) >= 0 ? text : fallback;
     }
 
+    /// <summary>
+    /// Les valeurs de la liste, dans leur ordre, sans doublon et sans celles hors de <paramref name="allowed"/> ; un tableau vide donne
+    /// une liste vide. <paramref name="fallback"/> si la clé manque ou n'est pas un tableau.
+    /// </summary>
+    public static IReadOnlyList<string> List(JsonElement settings, string key, IReadOnlyList<string> allowed, IReadOnlyList<string> fallback)
+    {
+        if (!TryGet(settings, key, out var value) || value.ValueKind != JsonValueKind.Array)
+        {
+            return fallback;
+        }
+
+        var items = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            var text = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+            if (text is not null && allowed.Contains(text) && !items.Contains(text))
+            {
+                items.Add(text);
+            }
+        }
+        return items;
+    }
+
     /// <summary>L'identifiant d'une entité choisie par une recherche (<c>{"id":"sensor.x","name":"…"}</c>) ; vide si absent ou mal formé.</summary>
     public static string EntityId(JsonElement settings, string key) =>
         TryGet(settings, key, out var value) ? Text(value, "id") : "";
