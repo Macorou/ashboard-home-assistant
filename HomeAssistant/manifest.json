@@ -1,0 +1,131 @@
+{
+  "id": "macorou.home-assistant",
+  "name": "Home Assistant",
+  "description": "Affiche ton installation solaire depuis Home Assistant, avec des flux de courant animés. Module non affilié au projet Home Assistant.",
+  "author": "Macorou",
+  "version": "1.0.0",
+  "sdk": "1.0",
+  "entry": "HomeAssistant.dll",
+  "permissions": [ "reseau-local", "internet" ],
+  "repository": "Macorou/ashboard-home-assistant",
+  "icon": "icon.png",
+  "minSize": { "columns": 5, "rows": 3 },
+  "presets": {
+    "compact": { "columns": 5, "rows": 3 },
+    "ideal": { "columns": 6, "rows": 4 },
+    "large": { "columns": 8, "rows": 4 }
+  },
+  "settings": [
+    { "kind": "secret", "key": "ha_url", "label": "Adresse de Home Assistant", "help": "Par exemple 192.168.1.10:8123 ou https://maison.exemple.fr. Partagée par toutes les cases du module." },
+    { "kind": "secret", "key": "ha_token", "label": "Clé API (jeton longue durée)", "help": "Crée-la dans Home Assistant : ouvre ton profil, onglet Sécurité, puis « Jetons d'accès longue durée ». Partagée par toutes les cases du module." },
+    { "kind": "action", "key": "test", "label": "Tester la connexion" },
+    { "kind": "action", "key": "forget_cert", "label": "Oublier le certificat", "confirm": "Oublier le certificat de Home Assistant mémorisé ? Il sera appris de nouveau à la prochaine connexion." },
+    {
+      "kind": "choice", "key": "display", "label": "Affichage",
+      "options": [ { "value": "energy", "label": "Flux d'énergie" } ],
+      "default": "energy"
+    },
+    {
+      "kind": "choice", "key": "layout", "label": "Disposition",
+      "options": [
+        { "value": "top", "label": "Pointe en haut" },
+        { "value": "left", "label": "Maison à gauche" },
+        { "value": "bottom", "label": "Maison en bas" }
+      ],
+      "default": "top",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "choice", "key": "house", "label": "Style de maison",
+      "options": [
+        { "value": "modern", "label": "Contemporaine" },
+        { "value": "classic", "label": "Traditionnelle" }
+      ],
+      "default": "modern",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "lookup", "key": "solar", "label": "Capteur de production", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "help": "Le capteur de puissance de tes panneaux, en W ou en kW.",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "choice", "key": "grid_mode", "label": "Capteurs du réseau",
+      "options": [
+        { "value": "one", "label": "Un seul capteur" },
+        { "value": "two", "label": "Deux capteurs, achat et vente" }
+      ],
+      "default": "one",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "lookup", "key": "grid", "label": "Capteur réseau", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "grid_mode", "value": "one" }
+    },
+    {
+      "kind": "toggle", "key": "grid_inverted", "label": "Positif à la vente", "default": false,
+      "help": "Laisse décoché si ton capteur est positif quand tu achètes du courant.",
+      "visibleWhen": { "key": "grid_mode", "value": "one" }
+    },
+    {
+      "kind": "lookup", "key": "grid_import", "label": "Capteur d'achat", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "grid_mode", "value": "two" }
+    },
+    {
+      "kind": "lookup", "key": "grid_export", "label": "Capteur de vente", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "grid_mode", "value": "two" }
+    },
+    {
+      "kind": "lookup", "key": "home", "label": "Capteur de consommation (facultatif)", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun : consommation calculée",
+      "help": "Laisse vide pour que la consommation soit calculée à partir des autres capteurs.",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "choice", "key": "battery_mode", "label": "Batterie",
+      "options": [
+        { "value": "none", "label": "Pas de batterie" },
+        { "value": "one", "label": "Un seul capteur de puissance" },
+        { "value": "two", "label": "Deux capteurs, charge et décharge" }
+      ],
+      "default": "none",
+      "visibleWhen": { "key": "display", "value": "energy" }
+    },
+    {
+      "kind": "lookup", "key": "battery", "label": "Capteur de puissance de la batterie", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "battery_mode", "value": "one" }
+    },
+    {
+      "kind": "toggle", "key": "battery_inverted", "label": "Positif en charge", "default": false,
+      "help": "Laisse décoché si ton capteur est positif quand la batterie se décharge.",
+      "visibleWhen": { "key": "battery_mode", "value": "one" }
+    },
+    {
+      "kind": "lookup", "key": "battery_charge", "label": "Capteur de charge", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "battery_mode", "value": "two" }
+    },
+    {
+      "kind": "lookup", "key": "battery_discharge", "label": "Capteur de décharge", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "battery_mode", "value": "two" }
+    },
+    {
+      "kind": "lookup", "key": "battery_soc", "label": "Niveau de la batterie, en % (facultatif)", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun : pas de pourcentage",
+      "help": "Sans lui, la jauge reste éteinte et le pourcentage n'est pas affiché.",
+      "visibleWhen": { "key": "battery_mode", "value": "one" }
+    },
+    {
+      "kind": "lookup", "key": "battery_soc2", "label": "Niveau de la batterie, en % (facultatif)", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun : pas de pourcentage",
+      "help": "Sans lui, la jauge reste éteinte et le pourcentage n'est pas affiché.",
+      "visibleWhen": { "key": "battery_mode", "value": "two" }
+    }
+  ]
+}

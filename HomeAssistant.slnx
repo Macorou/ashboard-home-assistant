@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HomeAssistant/HomeAssistant.csproj" />
+  <Project Path="HomeAssistant.Tests/HomeAssistant.Tests.csproj" />
+</Solution>
