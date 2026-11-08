@@ -104,6 +104,13 @@ Si aucune des deux n'est accordée, le module ne se connecte pas et te demande d
 
 Un nom d'hôte ne permet pas de savoir laquelle des deux est utile. Si la connexion échoue avec un nom d'hôte, vérifie d'abord les permissions.
 
+Même avec une adresse IP locale, `reseau-local` peut ne pas suffire. Windows ne range un appareil dans le réseau local que s'il est sur le sous-réseau d'un réseau marqué comme approuvé. Tout le reste compte comme Internet, notamment dans ces cas :
+
+- le type de profil de ta connexion est **Public** ;
+- Home Assistant est sur un autre sous-réseau, sur un VLAN ou derrière un VPN.
+
+Si c'est ton réseau à la maison, passe ta connexion en **Privé** : Paramètres, Réseau et Internet, propriétés de la connexion, « Type de profil réseau ». Sinon, coche `internet` en plus de `reseau-local`, que le module demande pour toute adresse IP locale.
+
 ## Dépannage
 
 - **« Clé refusée »** : la clé a été révoquée ou n'est pas la bonne. Crée-en une nouvelle dans ton profil Home Assistant, onglet Sécurité, et colle-la dans les réglages.
@@ -113,6 +120,7 @@ Un nom d'hôte ne permet pas de savoir laquelle des deux est utile. Si la connex
 - **« Windows bloque la connexion »** ou **« Home Assistant ne répond pas »** : vérifie l'adresse, puis les permissions. Avec un nom de domaine, coche `reseau-local` et `internet`, car Windows décide selon l'adresse IP réelle derrière le nom.
 - **« Le serveur a répondu l'erreur … »** : Home Assistant ou son reverse proxy est en panne ou encore en train de démarrer.
 - **« Home Assistant est injoignable »** : les autres cas. Vérifie l'adresse, le port (8123 par défaut), et la permission `reseau-local` ou `internet`.
+- **Ça ne marche qu'avec `internet` coché, alors que l'adresse est locale** : Windows ne considère pas ce réseau comme local. Voir [Permissions](#permissions).
 - **Un capteur est introuvable** : son identifiant a changé dans Home Assistant. Choisis-le de nouveau dans la liste.
 - **Le certificat a changé** : utilise le bouton **Oublier le certificat**, puis teste la connexion.
 
