@@ -272,6 +272,46 @@ public sealed class HaClientTests
         Assert.Empty(fake.Requests);
     }
 
+    [Theory]
+    [InlineData("<html><body>Routeur</body></html>")]
+    [InlineData("""{"version":"1"}""")]
+    [InlineData("[]")]
+    public async Task Ping_200WithoutMessage_IsBadResponse(string body)
+    {
+        var fake = new FakeHomeAssistant();
+        fake.Responses["/api/"] = (200, body);
+        using var client = Create(fake);
+
+        var problem = await ProblemOf(() => client.PingAsync(CancellationToken.None));
+
+        Assert.Equal(HaProblemKind.BadResponse, problem.Kind);
+    }
+
+    [Fact]
+    public async Task Get_EmptyState_IsValid()
+    {
+        var fake = new FakeHomeAssistant();
+        fake.Responses["/api/states/sensor.x"] = (200, StateJson("sensor.x", ""));
+        using var client = Create(fake);
+
+        var state = await client.GetStateAsync("sensor.x", CancellationToken.None);
+
+        Assert.Equal("", state.State);
+        Assert.Equal("sensor.x", state.EntityId);
+    }
+
+    [Fact]
+    public async Task Get_MissingOrNonStringState_IsBadResponse()
+    {
+        var fake = new FakeHomeAssistant();
+        fake.Responses["/api/states/sensor.a"] = (200, """{"entity_id":"sensor.a"}""");
+        fake.Responses["/api/states/sensor.b"] = (200, """{"entity_id":"sensor.b","state":12}""");
+        using var client = Create(fake);
+
+        Assert.Equal(HaProblemKind.BadResponse, (await ProblemOf(() => client.GetStateAsync("sensor.a", CancellationToken.None))).Kind);
+        Assert.Equal(HaProblemKind.BadResponse, (await ProblemOf(() => client.GetStateAsync("sensor.b", CancellationToken.None))).Kind);
+    }
+
     [Fact]
     public async Task Ping_401_IsUnauthorized()
     {

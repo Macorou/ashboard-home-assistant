@@ -79,7 +79,7 @@ public class HomeAssistantModule : CommunityModule
     /// montrer. Sert aux recherches et aux boutons, qui tournent sur une instance où <c>StartAsync</c> n'a pas eu lieu. L'appelant
     /// libère le client.
     /// </summary>
-    internal HaClient? TryCreateClient(out string? problem) => CreateClient(FillConnectionFirst, checkPermissions: false, out problem);
+    internal HaClient? TryCreateClient(out string? problem) => CreateClient(FillConnectionFirst, checkPermissions: true, out problem);
 
     private HaClient? CreateClient(string emptyMessage, bool checkPermissions, out string? problem)
     {
@@ -168,8 +168,8 @@ public class HomeAssistantModule : CommunityModule
         }
     }
 
-    /// <summary>Un résultat sans valeur utile : un objet vide, que <see cref="SettingsReader.EntityId"/> lit comme « aucun capteur ».</summary>
-    private static LookupResult Guidance(string message) => new(message, JsonSerializer.SerializeToElement(new { }));
+    /// <summary>Un résultat sans valeur utile : un JSON null, que <see cref="SettingsReader.EntityId"/> lit comme « aucun capteur ».</summary>
+    private static LookupResult Guidance(string message) => new(message, JsonSerializer.SerializeToElement<object?>(null));
 
     /// <summary>Tout échec est montré, sauf l'annulation par l'appelant et le manque de mémoire.</summary>
     private static bool IsReportable(Exception ex, CancellationToken ct) =>

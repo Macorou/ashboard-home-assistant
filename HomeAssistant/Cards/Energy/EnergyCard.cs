@@ -16,6 +16,9 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
     internal static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(3);
     internal const int FailuresBeforeOffline = 3;
 
+    /// <summary>Après un refus de la clé, on n'insiste pas : Home Assistant peut bannir l'adresse après trop d'essais.</summary>
+    internal static readonly TimeSpan RetryAfterUnauthorized = TimeSpan.FromSeconds(60);
+
     private const string UnknownProblem = "Impossible de lire Home Assistant. Vérifie l'adresse, la clé API et les permissions du module.";
 
     private readonly CancellationTokenSource _stop = new();
@@ -27,6 +30,7 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
 
     // Seulement touchés par la lecture en cours, qui est unique.
     private int _failures;
+    private DateTimeOffset? _retryAt;
     private (ModuleHealth Health, string? Message)? _status;
 
     /// <summary>Le dernier état publié, remplacé en entier ; null tant qu'aucune lecture n'a réussi.</summary>
@@ -65,7 +69,7 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         {
             lock (_gate)
             {
-                if (!_closed && _refresh.IsCompleted)
+                if (!_closed && _refresh.IsCompleted && !(_retryAt is { } retryAt && context.Services.Time.GetUtcNow() < retryAt))
                 {
                     _refresh = RefreshAsync(_stop.Token);
                 }
@@ -120,6 +124,7 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         WarnUnknownUnits(states);
         var snapshot = EnergyReader.Combine(config, states);
         _failures = 0;
+        _retryAt = null;
 
         if (snapshot.UnavailableGridEntity is { } grid)
         {
@@ -138,6 +143,11 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         var fatal = problems.FirstOrDefault(p => p.Kind is HaProblemKind.Unauthorized or HaProblemKind.EntityNotFound or HaProblemKind.Certificate);
         if (fatal is not null)
         {
+            if (fatal.Kind == HaProblemKind.Unauthorized)
+            {
+                _retryAt = context.Services.Time.GetUtcNow() + RetryAfterUnauthorized;
+            }
+
             MarkStale();
             Report(ModuleHealth.Offline, fatal.Message);
             return;
@@ -188,7 +198,11 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
 
     public async ValueTask DisposeAsync()
     {
-        _closed = true;
+        lock (_gate)
+        {
+            _closed = true;
+        }
+
         _timer?.Dispose();
         await _stop.CancelAsync().ConfigureAwait(false);
         await _refresh.ConfigureAwait(false);

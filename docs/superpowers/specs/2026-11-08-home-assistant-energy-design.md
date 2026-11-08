@@ -168,7 +168,7 @@ Espace de dessin 700 × 434, mis à l'échelle uniformément et centré dans `ct
 - Tests automatiques (`AshboardVision.Sdk.Testing`) : calcul des flux, lecture des unités, formats de réseau et de batterie, statuts, avec un client HTTP simulé.
 - `ashboard-module check` conclut « Compatible ». Ce banc lance le module sans secrets, il reste donc `NotConfigured` et ne montre pas le dessin.
 - Une galerie d'images produite par les tests montre les trois dispositions à chaque taille et dans chaque thème, avec et sans batterie, pour le contrôle visuel.
-- Essai réel en mode développeur sur le Home Assistant de l'auteur, par l'utilisateur, avec `sensor.total_active_power` et `sensor.puissance_total_des_phases_meross`.
+- Essai réel en mode développeur sur le Home Assistant de l'auteur, par l'utilisateur, avec ses capteurs de production et de réseau.
 - Module non configuré : aucune erreur `Offline` au banc d'essai.
 - Relecture finale du code par Opus 5.5 **[Décidé]**. Sous-agents de construction : Haiku 5.5 à Sonnet 5.5 selon la complexité **[Décidé]**.
 

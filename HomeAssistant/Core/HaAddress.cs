@@ -40,7 +40,7 @@ internal sealed record HaAddress(Uri Root, bool IsLocalhost, bool IsPrivate)
             return false;
         }
 
-        var root = new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+        var root = new Uri($"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? "" : ":" + uri.Port)}/");
         var bare = uri.Host.Trim('[', ']');
         if (IPAddress.TryParse(bare, out var ip))
         {

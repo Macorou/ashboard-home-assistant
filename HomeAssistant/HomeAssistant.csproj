@@ -9,6 +9,11 @@
     <RootNamespace>HomeAssistant</RootNamespace>
   </PropertyGroup>
 
+  <!-- Pas de .pdb dans le paquet publié. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Le SDK, en version exacte : 1.0.0 est celle que vise "sdk": "1.0" dans manifest.json. Une version flottante (1.0.*) obligerait chaque
          restauration à interroger les sources de paquets (donc à échouer hors ligne) ; pour viser une version plus récente du SDK, change ce

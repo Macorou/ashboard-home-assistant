@@ -6,6 +6,8 @@ public sealed class HaAddressTests
     [InlineData("192.168.1.10:8123", "http://192.168.1.10:8123/")]
     [InlineData("http://ha.local:8123/", "http://ha.local:8123/")]
     [InlineData("  https://maison.duckdns.org \n", "https://maison.duckdns.org/")]
+    [InlineData("http://u:p@ha.local:8123", "http://ha.local:8123/")]
+    [InlineData("https://user:secret@maison.duckdns.org/lovelace?x=1", "https://maison.duckdns.org/")]
     public void TryParse_Normalizes(string raw, string expected)
     {
         Assert.True(HaAddress.TryParse(raw, out var address));

@@ -108,6 +108,29 @@ public sealed class EnergyCardTests
     }
 
     [Fact]
+    public async Task Unauthorized_RetriesOnlyOncePerMinute_ThenRecovers()
+    {
+        var ha = Author();
+        ha.Responses["/api/states/sensor.pv"] = (401, "{}");
+        var (host, probe) = await StartAsync(ha);
+        await using var _h = host;
+        await WaitUntilAsync(() => host.Health == ModuleHealth.Offline);
+        await ReadsAsync(ha, 1);
+        var before = Count(ha);
+
+        host.Time.Advance(TimeSpan.FromSeconds(30));
+        await Task.Delay(100);
+        Assert.Equal(before, Count(ha));
+
+        Set(ha, "sensor.pv", "1124");
+        host.Time.Advance(TimeSpan.FromSeconds(30));
+        await WaitUntilAsync(() => CardOf(probe).Current is not null);
+
+        Assert.True(Count(ha) > before);
+        Assert.Equal(ModuleHealth.Online, host.Health);
+    }
+
+    [Fact]
     public async Task MissingEntity_NamesIt()
     {
         var ha = Author();

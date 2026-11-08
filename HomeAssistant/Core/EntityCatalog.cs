@@ -28,10 +28,10 @@ internal static class EntityCatalog
 
         return states
             .Where(s => s.EntityId.StartsWith("sensor.", StringComparison.Ordinal) && IsOfKind(s, kind))
-            .Select(s => (State: s, Name: NameOf(s), Key: Normalize(NameOf(s)), Id: Normalize(s.EntityId)))
+            .Select(s => (State: s, Name: NameOf(s), Key: Normalize(NameOf(s)), Id: Normalize(s.EntityId), ShortId: Normalize(s.EntityId["sensor.".Length..])))
             .Where(e => needle.Length == 0 || e.Key.Contains(needle, StringComparison.Ordinal) || e.Id.Contains(needle, StringComparison.Ordinal))
             .OrderBy(e => kind == EntityKind.Percent && e.State.DeviceClass == "battery" ? 0 : 1)
-            .ThenBy(e => e.Key.StartsWith(needle, StringComparison.Ordinal) || e.Id.StartsWith(needle, StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(e => e.Key.StartsWith(needle, StringComparison.Ordinal) || e.ShortId.StartsWith(needle, StringComparison.Ordinal) ? 0 : 1)
             .ThenBy(e => e.Key, StringComparer.Ordinal)
             .ThenBy(e => e.Id, StringComparer.Ordinal)
             .Take(MaxResults)

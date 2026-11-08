@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AshboardVision.Sdk;
 using AshboardVision.Sdk.Testing;
 
 namespace HomeAssistant.Tests;
@@ -8,12 +9,12 @@ public sealed class ModuleActionsTests
     private static string ManifestPath => Path.Combine(AppContext.BaseDirectory, "manifest.json");
 
     /// <summary>Un hôte sans réglages (comme la fenêtre de réglage pour une recherche) ; <c>Probe</c> donne l'instance, créée au démarrage de l'hôte (les tests le démarrent, la sonde est posée avant).</summary>
-    private static (ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe) Host(FakeHomeAssistant ha, string? url = "192.168.1.10:8123", string? token = "abc")
+    private static (ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe) Host(FakeHomeAssistant ha, string? url = "192.168.1.10:8123", string? token = "abc", IReadOnlyList<ModulePermission>? granted = null)
     {
         TestableModule.Handler.Value = ha;
         var probe = new TestableModule.Holder();
         TestableModule.Probe.Value = probe;
-        var host = new ModuleTestHost<TestableModule>(ManifestPath, default(JsonElement), null);
+        var host = new ModuleTestHost<TestableModule>(ManifestPath, default(JsonElement), granted);
         if (url is not null)
         {
             host.Secrets.Set("ha_url", url);
@@ -62,6 +63,7 @@ public sealed class ModuleActionsTests
 
         var result = Assert.Single(results);
         Assert.Equal("Remplis d'abord l'adresse et la clé API", result.Label);
+        Assert.Equal(JsonValueKind.Null, result.Value.ValueKind);
         Assert.Equal("", SettingsReader.EntityId(JsonSerializer.SerializeToElement(new { solar = result.Value }), "solar"));
         Assert.Empty(ha.Requests);
     }
@@ -119,6 +121,35 @@ public sealed class ModuleActionsTests
 
         Assert.False(result.Ok);
         Assert.Contains("refuse ta clé API", result.Message);
+    }
+
+    [Fact]
+    public async Task Action_Test_WithoutPermission_SaysWhichOneToTick()
+    {
+        var ha = new FakeHomeAssistant();
+        var (host, probe) = Host(ha, granted: []);
+        await using var _ = host;
+        await host.StartAsync();
+
+        var result = await probe.Module!.RunActionAsync("test", CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Contains("Réseau local", result.Message);
+        Assert.Empty(ha.Requests);
+    }
+
+    [Fact]
+    public async Task Lookup_WithoutPermission_SaysWhichOneToTick()
+    {
+        var ha = new FakeHomeAssistant();
+        var (host, probe) = Host(ha, granted: []);
+        await using var _ = host;
+        await host.StartAsync();
+
+        var results = await probe.Module!.LookupAsync("solar", "sol", CancellationToken.None);
+
+        Assert.Contains("Réseau local", Assert.Single(results).Label);
+        Assert.Empty(ha.Requests);
     }
 
     [Fact]

@@ -56,7 +56,7 @@ Si tu te connectes en `https` à une adresse privée (réseau local, `.local`, `
 
 ### Capteurs
 
-Tous les capteurs se choisissent dans une liste : tape un bout de leur nom, le module propose les capteurs correspondants (au plus 50), avec leur valeur actuelle et leur identifiant. Les capteurs de puissance doivent être en W ou en kW.
+Tous les capteurs se choisissent dans une liste : tape quelques lettres de leur nom, le module affiche 5 propositions, avec leur valeur actuelle et leur identifiant. Les capteurs de puissance doivent être en W ou en kW.
 
 **Production (obligatoire)** : le capteur de puissance de tes panneaux. Sa valeur est positive.
 

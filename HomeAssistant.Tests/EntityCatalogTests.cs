@@ -93,6 +93,14 @@ public sealed class EntityCatalogTests
     }
 
     [Fact]
+    public void Search_IdPrefixIgnoresSensorDomain()
+    {
+        var states = new[] { S("sensor.b", "1", "W", "Alpha total"), S("sensor.total_x", "1", "W", "Zeta") };
+
+        Assert.Equal(["sensor.total_x", "sensor.b"], Ids(EntityCatalog.Search(states, EntityKind.Power, "total")));
+    }
+
+    [Fact]
     public void Search_CapsAtFifty()
     {
         var states = Enumerable.Range(0, 80).Select(i => S($"sensor.s{i:00}", "1", "W", $"Capteur {i:00}")).ToArray();

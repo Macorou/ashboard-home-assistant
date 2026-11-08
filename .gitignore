@@ -7,4 +7,5 @@ pack-out/
 *.avmod
 *.avmod.sha256
 .superpowers/
+.claude/
 gallery/

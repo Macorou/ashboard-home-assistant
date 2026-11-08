@@ -27,7 +27,12 @@ internal sealed class HaProblem(HaProblemKind kind, string userMessage, string? 
 /// </summary>
 internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisposable
 {
-    public Task PingAsync(CancellationToken ct) => SendAsync("api/", null, ct);
+    /// <summary>Vérifie qu'on parle bien à Home Assistant : la racine de son API répond un objet JSON avec <c>message</c>.</summary>
+    public async Task PingAsync(CancellationToken ct)
+    {
+        var body = await SendAsync("api/", null, ct).ConfigureAwait(false);
+        Parse(body, root => root.ValueKind == JsonValueKind.Object && root.TryGetProperty("message", out _) ? true : throw Bad());
+    }
 
     public async Task<HaState> GetStateAsync(string entityId, CancellationToken ct)
     {
@@ -127,7 +132,8 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
     {
         if (element.ValueKind != JsonValueKind.Object
             || !TryString(element, "entity_id", out var id)
-            || !TryString(element, "state", out var state))
+            || !element.TryGetProperty("state", out var stateElement)
+            || stateElement.ValueKind != JsonValueKind.String)
         {
             return null;
         }
@@ -140,7 +146,7 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
             friendlyName = Optional(attributes, "friendly_name");
         }
 
-        return new HaState(id!, state!, unit, deviceClass, friendlyName);
+        return new HaState(id!, stateElement.GetString() ?? "", unit, deviceClass, friendlyName);
     }
 
     private static bool TryString(JsonElement element, string name, out string? value)
