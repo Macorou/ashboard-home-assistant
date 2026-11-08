@@ -1,5 +1,9 @@
 # Home Assistant, module pour Ashboard Vision
 
+<p align="center">
+  <img src="docs/images/carte-soleil.png" alt="La carte Flux d'énergie en plein soleil : les panneaux alimentent la maison et la batterie, et le surplus part vers le réseau." width="700">
+</p>
+
 Un module pour **Ashboard Vision**, le logiciel de l'écran Thermalright Trofeo Vision. Il lit ton installation dans **Home Assistant** et affiche ce qui se passe dans ton installation solaire : la production des panneaux, ta consommation, ce que tu achètes ou vends au réseau, et ta batterie si tu en as une. Les flux de courant sont dessinés et animés entre les panneaux, la maison et le réseau.
 
 Le module **ne fait que lire** Home Assistant. Il n'envoie aucune commande et n'écrit rien dans ta configuration.
@@ -7,6 +11,12 @@ Le module **ne fait que lire** Home Assistant. Il n'envoie aucune commande et n'
 > Ce module n'est **pas affilié au projet Home Assistant**. C'est un module de la communauté pour Ashboard Vision.
 
 ## Ce qu'il affiche
+
+| Maison à gauche, sans batterie | Maison en bas, avec batterie | La nuit, sur batterie |
+|:---:|:---:|:---:|
+| ![Disposition maison à gauche, style traditionnel, sans batterie.](docs/images/carte-maison-gauche.png) | ![Disposition maison en bas, style contemporain, avec batterie.](docs/images/carte-maison-bas.png) | ![La carte la nuit : la production est nulle.](docs/images/carte-nuit.png) |
+
+*Images rendues par le module, avec des valeurs d'exemple.*
 
 - La carte **Flux d'énergie** : les panneaux, la maison, le réseau et, si tu en as une, la batterie.
 - Trois dispositions : pointe du triangle en haut, maison à gauche, ou maison en bas.
