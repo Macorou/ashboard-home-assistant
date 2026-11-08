@@ -11,47 +11,24 @@ internal sealed record EnergyState(EnergySnapshot Snapshot, EnergyFlows Flows, b
 /// La carte d'énergie : relit les capteurs toutes les 3 s (une lecture à la fois), calcule les flux et annonce l'état de santé du module
 /// (spec § 6), puis dessine le résultat avec <see cref="EnergyRenderer"/>.
 /// </summary>
-internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICard
+internal sealed class EnergyCard(CardContext context, EnergyConfig config) : PollingCard(context, RefreshEvery)
 {
     internal static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(3);
-    internal const int FailuresBeforeOffline = 3;
 
-    /// <summary>Après un refus de la clé, on n'insiste pas : Home Assistant peut bannir l'adresse après trop d'essais.</summary>
-    internal static readonly TimeSpan RetryAfterUnauthorized = TimeSpan.FromSeconds(60);
-
-    private const string UnknownProblem = "Impossible de lire Home Assistant. Vérifie l'adresse, la clé API et les permissions du module.";
-
-    private readonly CancellationTokenSource _stop = new();
-    private readonly object _gate = new();
     private readonly HashSet<string> _warnedUnits = new(StringComparer.Ordinal);
-    private System.Threading.ITimer? _timer;
-    private volatile Task _refresh = Task.CompletedTask;
-    private volatile bool _closed;
-
-    // Seulement touchés par la lecture en cours, qui est unique.
-    private int _failures;
-    private DateTimeOffset? _retryAt;
-    private (ModuleHealth Health, string? Message)? _status;
 
     /// <summary>Le dernier état publié, remplacé en entier ; null tant qu'aucune lecture n'a réussi.</summary>
     internal volatile EnergyState? Current;
 
     private readonly EnergyRenderer _renderer = new(config);
 
-    public bool IsAnimating => !_closed && _renderer.IsAnimating(Current);
+    public override bool IsAnimating => !IsClosed && _renderer.IsAnimating(Current);
 
-    public void Start()
-    {
-        Refresh();
-        if (!_closed)
-        {
-            _timer = context.Services.Time.CreateTimer(_ => Refresh(), null, RefreshEvery, RefreshEvery);
-        }
-    }
+    protected override IReadOnlyCollection<string> EntityIds => config.EntityIds.ToArray();
 
-    public void Render(SKCanvas canvas, ModuleRenderContext ctx)
+    public override void Render(SKCanvas canvas, ModuleRenderContext ctx)
     {
-        if (!_closed)
+        if (!IsClosed)
         {
             _renderer.Render(canvas, ctx, Current);
         }
@@ -63,68 +40,10 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         && !string.Equals(unit.Trim(), "W", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(unit.Trim(), "kW", StringComparison.OrdinalIgnoreCase);
 
-    private void Refresh()
-    {
-        try
-        {
-            lock (_gate)
-            {
-                if (!_closed && _refresh.IsCompleted && !(_retryAt is { } retryAt && context.Services.Time.GetUtcNow() < retryAt))
-                {
-                    _refresh = RefreshAsync(_stop.Token);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            context.Services.Log.Warning("Actualisation ignorée : " + ex.Message);
-        }
-    }
-
-    private async Task RefreshAsync(CancellationToken ct)
-    {
-        try
-        {
-            var ids = config.EntityIds.ToArray();
-            var reads = ids.Select(id => context.Client.GetStateAsync(id, ct)).ToArray();
-            try
-            {
-                await Task.WhenAll(reads).ConfigureAwait(false);
-            }
-            catch (Exception) when (reads.Any(read => read.IsFaulted || read.IsCanceled))
-            {
-                // Chaque lecture est examinée plus bas : WhenAll ne rend que la première erreur.
-            }
-
-            if (_closed || ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (reads.Any(read => !read.IsCompletedSuccessfully))
-            {
-                Fail(reads.Where(read => read.IsFaulted).Select(read => read.Exception!.InnerException).ToList());
-                return;
-            }
-
-            Succeed(ids.Zip(reads, (id, read) => (id, state: read.Result)).ToDictionary(pair => pair.id, pair => pair.state, StringComparer.Ordinal));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            // Rien ne doit sortir d'une tâche de fond, surtout pas après la fermeture.
-            if (!_closed)
-            {
-                context.Services.Log.Warning("Lecture de Home Assistant ignorée : " + ex.GetType().Name);
-            }
-        }
-    }
-
-    private void Succeed(Dictionary<string, HaState> states)
+    protected override void OnRead(IReadOnlyDictionary<string, HaState> states)
     {
         WarnUnknownUnits(states);
         var snapshot = EnergyReader.Combine(config, states);
-        _failures = 0;
-        _retryAt = null;
 
         if (snapshot.UnavailableGridEntity is { } grid)
         {
@@ -137,34 +56,7 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         Report(ModuleHealth.Online, null);
     }
 
-    private void Fail(IReadOnlyList<Exception?> errors)
-    {
-        var problems = errors.OfType<HaProblem>().ToList();
-        var fatal = problems.FirstOrDefault(p => p.Kind is HaProblemKind.Unauthorized or HaProblemKind.EntityNotFound or HaProblemKind.Certificate);
-        if (fatal is not null)
-        {
-            if (fatal.Kind == HaProblemKind.Unauthorized)
-            {
-                _retryAt = context.Services.Time.GetUtcNow() + RetryAfterUnauthorized;
-            }
-
-            MarkStale();
-            Report(ModuleHealth.Offline, fatal.Message);
-            return;
-        }
-
-        _failures++;
-        if (_failures >= FailuresBeforeOffline)
-        {
-            MarkStale();
-            Report(ModuleHealth.Offline, problems.FirstOrDefault()?.Message ?? UnknownProblem);
-            return;
-        }
-
-        context.Invalidate();
-    }
-
-    private void MarkStale()
+    protected override void MarkStale()
     {
         if (Current is { Stale: false } current)
         {
@@ -172,42 +64,17 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         }
     }
 
-    /// <summary>Annonce l'état seulement s'il change, puis demande un nouveau dessin.</summary>
-    private void Report(ModuleHealth health, string? message)
-    {
-        if (_status != (health, message))
-        {
-            _status = (health, message);
-            context.SetStatus(health, message);
-        }
-
-        context.Invalidate();
-    }
-
-    private void WarnUnknownUnits(Dictionary<string, HaState> states)
+    private void WarnUnknownUnits(IReadOnlyDictionary<string, HaState> states)
     {
         foreach (var (id, state) in states)
         {
             // Le niveau de batterie est en % : ce n'est pas une puissance.
             if (id != config.BatterySoc && IsUnknownUnit(state.Unit) && _warnedUnits.Add(id))
             {
-                context.Services.Log.Warning($"Unité « {state.Unit} » inconnue pour {id} : elle est traitée comme des W.");
+                Context.Services.Log.Warning($"Unité « {state.Unit} » inconnue pour {id} : elle est traitée comme des W.");
             }
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        lock (_gate)
-        {
-            _closed = true;
-        }
-
-        _timer?.Dispose();
-        await _stop.CancelAsync().ConfigureAwait(false);
-        await _refresh.ConfigureAwait(false);
-        context.Client.Dispose();
-        _stop.Dispose();
-        _renderer.Dispose();
-    }
+    protected override void DisposeRendering() => _renderer.Dispose();
 }
