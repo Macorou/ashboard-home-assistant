@@ -22,7 +22,7 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : Pol
 
     private readonly EnergyRenderer _renderer = new(config);
 
-    public override bool IsAnimating => !IsClosed && _renderer.IsAnimating(Current);
+    public override bool IsAnimating => !IsClosed && !_renderer.ShowsMessage && _renderer.IsAnimating(Current);
 
     protected override IReadOnlyCollection<string> EntityIds => config.EntityIds.ToArray();
 

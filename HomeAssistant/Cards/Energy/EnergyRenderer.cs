@@ -81,8 +81,24 @@ internal sealed class EnergyRenderer : IDisposable
         return _shown is { } shown && !Settled(shown, target);
     }
 
+    /// <summary>Le message à afficher si la case est plus petite que 5 × 3, sinon null.</summary>
+    internal static string? TooSmallMessage(GridSize size) =>
+        size.Columns < 5 || size.Rows < 3 ? "Agrandis la case : 5 × 3 minimum" : null;
+
+    /// <summary>Vrai si le dernier dessin a montré le message « case trop petite » : rien ne bouge alors.</summary>
+    internal bool ShowsMessage { get; private set; }
+
     internal void Render(SKCanvas canvas, ModuleRenderContext ctx, EnergyState? state)
     {
+        // La taille se vérifie avant tout, même sans données.
+        if (TooSmallMessage(ctx.Size) is { } message)
+        {
+            ShowsMessage = true;
+            ModuleDrawing.DrawActionMessage(canvas, ctx.Bounds, ctx.Theme, ctx.TextScale, message);
+            return;
+        }
+
+        ShowsMessage = false;
         if (state is null) return;
         var bounds = ctx.Bounds;
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
