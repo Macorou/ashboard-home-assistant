@@ -48,11 +48,11 @@ Garde cette clé pour toi. Elle donne accès à ton Home Assistant.
 
 ## Réglages
 
-Les réglages se trouvent dans la fenêtre de réglage de la case. L'adresse et la clé API sont partagées par toutes les cases du module : tu les saisis une seule fois.
+Les réglages se trouvent dans la fenêtre de réglage de la case. La clé API est masquée et partagée par toutes les cases du module : tu la saisis une seule fois. L'adresse s'affiche en clair ; si tu laisses son champ vide, le module reprend la dernière adresse utilisée.
 
 ### Connexion
 
-- **Adresse de Home Assistant** : par exemple `192.168.1.10:8123` ou `https://maison.exemple.fr`. Sans schéma, le module suppose `http://`. La barre oblique finale est retirée toute seule.
+- **Adresse de Home Assistant** : par exemple `192.168.1.10:8123` ou `https://maison.exemple.fr:8123`. Sans schéma, le module suppose `http://` : si ton Home Assistant est en HTTPS, écris bien `https://` au début. Indique aussi le port : Home Assistant utilise le 8123 par défaut, même en HTTPS, sauf s'il est derrière un reverse proxy. La barre oblique finale est retirée toute seule.
 - **Clé API** : le jeton créé plus haut.
 - **Tester la connexion** : le bouton vérifie l'adresse et la clé, puis te dit ce qui marche ou ce qui coince (adresse injoignable, clé refusée, permission manquante).
 
@@ -107,7 +107,12 @@ Un nom d'hôte ne permet pas de savoir laquelle des deux est utile. Si la connex
 ## Dépannage
 
 - **« Clé refusée »** : la clé a été révoquée ou n'est pas la bonne. Crée-en une nouvelle dans ton profil Home Assistant, onglet Sécurité, et colle-la dans les réglages.
-- **« Adresse injoignable »** : vérifie l'adresse, le port (8123 par défaut), et la permission `reseau-local` ou `internet`.
+- **« Le nom … est introuvable »** : l'adresse est mal écrite, ou ce PC ne connaît pas ce nom. Vérifie qu'elle s'ouvre dans un navigateur sur ce PC.
+- **« Rien ne répond sur le port … »** : Home Assistant écoute sur un autre port, souvent le 8123, même en HTTPS.
+- **« … a coupé la connexion en http »** : ton Home Assistant est en HTTPS. Commence l'adresse par `https://`.
+- **« Windows bloque la connexion »** ou **« Home Assistant ne répond pas »** : vérifie l'adresse, puis les permissions. Avec un nom de domaine, coche `reseau-local` et `internet`, car Windows décide selon l'adresse IP réelle derrière le nom.
+- **« Le serveur a répondu l'erreur … »** : Home Assistant ou son reverse proxy est en panne ou encore en train de démarrer.
+- **« Home Assistant est injoignable »** : les autres cas. Vérifie l'adresse, le port (8123 par défaut), et la permission `reseau-local` ou `internet`.
 - **Un capteur est introuvable** : son identifiant a changé dans Home Assistant. Choisis-le de nouveau dans la liste.
 - **Le certificat a changé** : utilise le bouton **Oublier le certificat**, puis teste la connexion.
 
@@ -123,7 +128,7 @@ ashboard-module pack HomeAssistant/bin/Release/net10.0 --out pack-out
 ```
 
 - `ashboard-module check` lance le module comme le logiciel le fait, et écrit une image PNG par taille et par thème dans `check-out`. Il conclut à la fin si le module est compatible.
-- `ashboard-module pack` fabrique `macorou.home-assistant-1.0.0.avmod` et son empreinte `.sha256`, à joindre à une version GitHub dont l'étiquette est `v1.0.0`.
+- `ashboard-module pack` fabrique `macorou.home-assistant-<version>.avmod` et son empreinte `.sha256`, à joindre à une version GitHub dont l'étiquette est `v<version>`.
 
 L'icône `HomeAssistant/icon.png` est produite par le test `WriteIcon` : `WRITE_ICON=1 dotnet test --filter IconTests`. Sans cette variable, le test vérifie seulement que l'icône existe et fait 256 × 256 pixels.
 

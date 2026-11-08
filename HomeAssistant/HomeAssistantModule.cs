@@ -75,15 +75,36 @@ public class HomeAssistantModule : CommunityModule
     private const string FillConnectionFirst = "Remplis d'abord l'adresse et la clé API";
 
     /// <summary>
-    /// Construit le client à partir des secrets <c>ha_url</c> et <c>ha_token</c> (jamais des réglages), ou rend null avec le message à
-    /// montrer. Sert aux recherches et aux boutons, qui tournent sur une instance où <c>StartAsync</c> n'a pas eu lieu. L'appelant
-    /// libère le client.
+    /// Construit le client à partir de l'adresse (voir <see cref="ReadAddress"/>) et du secret <c>ha_token</c>, ou rend null avec le
+    /// message à montrer. Sert aux recherches et aux boutons, qui tournent sur une instance où <c>StartAsync</c> n'a pas eu lieu.
+    /// L'appelant libère le client.
     /// </summary>
     internal HaClient? TryCreateClient(out string? problem) => CreateClient(FillConnectionFirst, checkPermissions: true, out problem);
 
+    /// <summary>La clé du coffre où le module retient la dernière adresse utilisable. Les versions 1.0.0 y rangeaient l'adresse saisie.</summary>
+    private const string RememberedAddressKey = "ha_url";
+
+    /// <summary>
+    /// L'adresse écrite dans les réglages de la case, sinon la dernière retenue. Une recherche ne voit jamais les réglages
+    /// (<c>Services.Settings</c> y est vide) : elle passe donc toujours par l'adresse retenue.
+    /// </summary>
+    private string ReadAddress()
+    {
+        var typed = SettingsReader.Text(Services.Settings, "ha_address");
+        return typed.Length > 0 ? typed : (Services.Secrets.Get(RememberedAddressKey) ?? "").Trim();
+    }
+
+    private void RememberAddress(string url)
+    {
+        if (Services.Secrets.Get(RememberedAddressKey) != url)
+        {
+            Services.Secrets.Set(RememberedAddressKey, url);
+        }
+    }
+
     private HaClient? CreateClient(string emptyMessage, bool checkPermissions, out string? problem)
     {
-        var url = (Services.Secrets.Get("ha_url") ?? "").Trim();
+        var url = ReadAddress();
         var token = (Services.Secrets.Get("ha_token") ?? "").Trim();
         if (url.Length == 0 || token.Length == 0)
         {
@@ -93,7 +114,7 @@ public class HomeAssistantModule : CommunityModule
 
         if (!HaAddress.TryParse(url, out var address))
         {
-            problem = "L'adresse de Home Assistant n'est pas valide : écris-la comme 192.168.1.10:8123 ou https://maison.exemple.fr.";
+            problem = "L'adresse de Home Assistant n'est pas valide : écris-la comme 192.168.1.10:8123 ou https://maison.exemple.fr:8123.";
             return null;
         }
 
@@ -102,6 +123,8 @@ public class HomeAssistantModule : CommunityModule
             problem = "Une adresse localhost n'est pas prise en charge : indique l'adresse réseau de ton Home Assistant, par exemple 192.168.1.10:8123.";
             return null;
         }
+
+        RememberAddress(url);
 
         if (checkPermissions && MissingPermissionMessage(address) is { } permissionMessage)
         {

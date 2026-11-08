@@ -3,7 +3,7 @@
   "name": "Home Assistant",
   "description": "Affiche ton installation solaire depuis Home Assistant, avec des flux de courant animés. Module non affilié au projet Home Assistant.",
   "author": "Macorou",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "sdk": "1.0",
   "entry": "HomeAssistant.dll",
   "permissions": [ "reseau-local", "internet" ],
@@ -16,7 +16,7 @@
     "large": { "columns": 8, "rows": 4 }
   },
   "settings": [
-    { "kind": "secret", "key": "ha_url", "label": "Adresse de Home Assistant", "help": "Par exemple 192.168.1.10:8123 ou https://maison.exemple.fr. Partagée par toutes les cases du module." },
+    { "kind": "text", "key": "ha_address", "label": "Adresse de Home Assistant", "placeholder": "192.168.1.10:8123", "maxLength": 200, "help": "Par exemple 192.168.1.10:8123, ou https://maison.exemple.fr:8123 si ton Home Assistant est en HTTPS. Laissé vide, le champ reprend la dernière adresse utilisée." },
     { "kind": "secret", "key": "ha_token", "label": "Clé API (jeton longue durée)", "help": "Crée-la dans Home Assistant : ouvre ton profil, onglet Sécurité, puis « Jetons d'accès longue durée ». Partagée par toutes les cases du module." },
     { "kind": "action", "key": "test", "label": "Tester la connexion" },
     { "kind": "action", "key": "forget_cert", "label": "Oublier le certificat", "confirm": "Oublier le certificat de Home Assistant mémorisé ? Il sera appris de nouveau à la prochaine connexion." },

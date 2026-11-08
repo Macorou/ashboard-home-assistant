@@ -50,7 +50,7 @@ Il s'appelle « Home Assistant » parce qu'il offrira à terme plusieurs cartes.
 ## 4. Connexion à Home Assistant
 
 - La clé API est un jeton d'accès longue durée créé dans Home Assistant (profil, onglet Sécurité), saisi dans les réglages du module **[Décidé]**.
-- **L'adresse et le jeton sont tous deux des champs `secret`** **[Choix]** : `ha_url` et `ha_token`, saisis une fois, partagés par toutes les cases. L'adresse doit être un secret parce que la recherche de capteurs ne peut lire que les secrets.
+- **Le jeton est un champ `secret`, l'adresse un champ `text`** (depuis la 1.0.1, un `secret` est toujours masqué à la saisie) : `ha_token` est partagé par toutes les cases, `ha_address` est propre à la case. La recherche de capteurs ne lit que les secrets, donc le module retient la dernière adresse utilisable dans le coffre, sous `ha_url`. Un champ `ha_address` vide reprend cette adresse, ce qui garde aussi les installations 1.0.0 fonctionnelles.
 - L'adresse accepte `http://192.168.1.10:8123`, `https://maison.duckdns.org` ou `192.168.1.10:8123`. Sans schéma, on suppose `http://`. La barre finale est retirée.
 - Bouton `action` « Tester la connexion » : `GET /api/` avec `Authorization: Bearer`, puis message clair (succès, adresse injoignable, jeton refusé, permission manquante).
 - Permissions déclarées : `reseau-local` et `internet` **[Choix]**. L'utilisateur coche celle qui correspond à son cas. Si aucune des deux n'est accordée (`Services.Has`), statut `NotConfigured` qui dit d'en cocher une. Une adresse IP dit laquelle est utile ; un nom d'hôte ne le dit pas, et un refus se traite alors comme un échec réseau, avec un message qui rappelle de vérifier les permissions. Une adresse `localhost` ou `127.0.0.1` donne `NotConfigured` avec une phrase expliquant que ce cas n'est pas pris en charge.
@@ -63,7 +63,7 @@ Tous de type `choice`, `toggle` ou `lookup`, dans cet ordre. Les champs propres 
 
 | Clé | Genre | Libellé | Détail |
 |---|---|---|---|
-| `ha_url` | secret | Adresse de Home Assistant | Partagé par le module |
+| `ha_address` | text | Adresse de Home Assistant | Propre à la case ; vide, reprend la dernière adresse retenue |
 | `ha_token` | secret | Clé API (jeton longue durée) | Partagé par le module |
 | `test` | action | Tester la connexion | |
 | `display` | choice | Affichage | Une option aujourd'hui : `energy`, « Flux d'énergie » |

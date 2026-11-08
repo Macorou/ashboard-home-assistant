@@ -48,6 +48,52 @@ public sealed class ModuleStartupTests
     }
 
     [Fact]
+    public void Manifest_ShowsTheAddress_AndOnlyTheKeyIsSecret()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var fields = manifest.RootElement.GetProperty("settings").EnumerateArray().ToArray();
+
+        var address = Assert.Single(fields, f => f.GetProperty("key").GetString() == "ha_address");
+        Assert.Equal("text", address.GetProperty("kind").GetString());
+        var secret = Assert.Single(fields, f => f.GetProperty("kind").GetString() == "secret");
+        Assert.Equal("ha_token", secret.GetProperty("key").GetString());
+    }
+
+    [Fact]
+    public async Task Start_AddressInSettings_IsRememberedForLookups()
+    {
+        await using var host = Host(new FakeHomeAssistant(), null, "abc", """{ "ha_address": "192.168.1.20:8123" }""");
+
+        await host.StartAsync();
+
+        Assert.Equal("192.168.1.20:8123", host.Secrets.Get("ha_url"));
+        Assert.DoesNotContain("adresse", host.StatusMessage ?? "");
+    }
+
+    [Fact]
+    public async Task Start_AddressInSettings_ReplacesTheRememberedOne()
+    {
+        await using var host = Host(new FakeHomeAssistant(), "192.168.1.10:8123", "abc", """{ "ha_address": "192.168.1.20:8123" }""");
+
+        await host.StartAsync();
+
+        Assert.Equal("192.168.1.20:8123", host.Secrets.Get("ha_url"));
+    }
+
+    [Theory]
+    [InlineData("localhost:8123")]
+    [InlineData("ftp://maison.exemple.fr")]
+    public async Task Start_UnusableAddress_IsNotRemembered(string address)
+    {
+        var settings = JsonSerializer.Serialize(new Dictionary<string, string> { ["ha_address"] = address });
+        await using var host = Host(new FakeHomeAssistant(), "192.168.1.10:8123", "abc", settings);
+
+        await host.StartAsync();
+
+        Assert.Equal("192.168.1.10:8123", host.Secrets.Get("ha_url"));
+    }
+
+    [Fact]
     public async Task Start_WithoutSecrets_IsNotConfiguredAndMakesNoRequest()
     {
         var ha = new FakeHomeAssistant();

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text.Json;
 
@@ -89,7 +90,7 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
 
             if ((int)response.StatusCode >= 500)
             {
-                throw Unreachable(null);
+                throw Unreachable($"Le serveur a répondu l'erreur {(int)response.StatusCode}. Vérifie que Home Assistant est démarré et, si tu en utilises un, son reverse proxy.", null);
             }
 
             if (!response.IsSuccessStatusCode)
@@ -105,15 +106,50 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
         }
         catch (OperationCanceledException ex)
         {
-            throw Unreachable(ex);
+            throw Unreachable(NoAnswerMessage(), ex);
         }
         catch (HttpRequestException ex)
         {
-            throw HasTlsCause(ex)
+            throw Find<AuthenticationException>(ex) is not null
                 ? new HaProblem(HaProblemKind.Certificate, "Le certificat de Home Assistant a changé ou n'est pas de confiance. Si tu l'as renouvelé, utilise « Oublier le certificat » dans les réglages.", inner: ex)
-                : Unreachable(ex);
+                : Unreachable(DescribeFailure(ex), ex);
         }
     }
+
+    /// <summary>Dit ce qui a empêché de joindre Home Assistant, avec l'hôte et le port en cause, pour que la correction soit évidente.</summary>
+    private string DescribeFailure(HttpRequestException ex)
+    {
+        if (http.BaseAddress is not { } address)
+        {
+            return UnreachableMessage;
+        }
+
+        var socketError = Find<SocketException>(ex)?.SocketErrorCode;
+        if (ex.HttpRequestError == HttpRequestError.NameResolutionError || socketError is SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData)
+        {
+            return $"Le nom {address.Host} est introuvable. Vérifie l'orthographe de l'adresse de Home Assistant.";
+        }
+
+        var cutOff = ex.HttpRequestError == HttpRequestError.ResponseEnded || socketError is SocketError.ConnectionReset or SocketError.ConnectionAborted;
+        return socketError switch
+        {
+            SocketError.ConnectionRefused when address.Port == DefaultPort =>
+                $"Rien ne répond sur le port {DefaultPort} de {address.Host}. Vérifie que Home Assistant est démarré et qu'il utilise bien ce port.",
+            SocketError.ConnectionRefused =>
+                $"Rien ne répond sur le port {address.Port} de {address.Host}. Home Assistant utilise le port {DefaultPort} par défaut : essaie {address.Scheme}://{address.Host}:{DefaultPort}.",
+            SocketError.TimedOut => NoAnswerMessage(),
+            SocketError.AccessDenied =>
+                $"Windows bloque la connexion vers {address.Host}. Accorde au module la permission « Réseau local » ou « Internet », ou les deux.",
+            _ when cutOff && address.Scheme == Uri.UriSchemeHttp =>
+                $"{address.Host} a coupé la connexion en http. Si Home Assistant est en HTTPS, écris l'adresse ainsi : https://{address.Host}:{address.Port}.",
+            _ => UnreachableMessage,
+        };
+    }
+
+    private string NoAnswerMessage() =>
+        http.BaseAddress is { } address
+            ? $"Home Assistant ne répond pas à {address.Authority}. Vérifie l'adresse, le port et les permissions du module (réseau local ou internet)."
+            : UnreachableMessage;
 
     private static T Parse<T>(string body, Func<JsonElement, T> read)
     {
@@ -158,18 +194,24 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
     private static string? Optional(JsonElement element, string name) =>
         element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
 
-    private static bool HasTlsCause(Exception ex)
+    /// <summary>La première exception du type voulu dans la chaîne des causes, ou null.</summary>
+    private static T? Find<T>(Exception ex) where T : Exception
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
-            if (e is AuthenticationException)
+            if (e is T found)
             {
-                return true;
+                return found;
             }
         }
 
-        return false;
+        return null;
     }
+
+    /// <summary>Le port par défaut de Home Assistant, en http comme en https.</summary>
+    private const int DefaultPort = 8123;
+
+    private const string UnreachableMessage = "Home Assistant est injoignable. Vérifie l'adresse et les permissions du module (réseau local ou internet).";
 
     private const string BadMessage = "Home Assistant a répondu, mais sa réponse est illisible. Vérifie l'adresse : est-ce bien celle de Home Assistant ?";
 
@@ -178,6 +220,6 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
     private static HaProblem Unauthorized() =>
         new(HaProblemKind.Unauthorized, "Home Assistant refuse ta clé API. Crée une nouvelle clé API dans ton profil Home Assistant et colle-la dans les réglages.");
 
-    private static HaProblem Unreachable(Exception? inner) =>
-        new(HaProblemKind.Unreachable, "Home Assistant est injoignable. Vérifie l'adresse et les permissions du module (réseau local ou internet).", inner: inner);
+    private static HaProblem Unreachable(string message, Exception? inner) =>
+        new(HaProblemKind.Unreachable, message, inner: inner);
 }

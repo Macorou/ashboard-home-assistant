@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Authentication;
 
 namespace HomeAssistant.Tests;
@@ -145,6 +146,118 @@ public sealed class HaClientTests
         var problem = await ProblemOf(() => client.GetStateAsync("sensor.x", CancellationToken.None));
 
         Assert.Equal(HaProblemKind.Unreachable, problem.Kind);
+    }
+
+    private static async Task<HaProblem> FailureAt(string address, Exception failure)
+    {
+        using var client = new HaClient(
+            new HttpClient(new FakeHomeAssistant { Failure = failure }) { BaseAddress = new Uri(address) },
+            () => Token);
+        var problem = await ProblemOf(() => client.GetStateAsync("sensor.x", CancellationToken.None));
+        Assert.Equal(HaProblemKind.Unreachable, problem.Kind);
+        Assert.DoesNotContain(Token, problem.Message);
+        Assert.True(problem.Message.Length < 200, problem.Message);
+        return problem;
+    }
+
+    private static HttpRequestException Socket(SocketError error, HttpRequestError kind = HttpRequestError.ConnectionError) =>
+        new(kind, "échec", new SocketException((int)error));
+
+    [Theory]
+    [InlineData(SocketError.HostNotFound)]
+    [InlineData(SocketError.TryAgain)]
+    [InlineData(SocketError.NoData)]
+    public async Task Get_UnknownHost_NamesTheHost(SocketError error)
+    {
+        var problem = await FailureAt("https://ha.exemple.fr:8123/", Socket(error, HttpRequestError.NameResolutionError));
+
+        Assert.Contains("ha.exemple.fr", problem.Message);
+        Assert.Contains("introuvable", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_ConnectionRefused_OnAnotherPort_Suggests8123()
+    {
+        var problem = await FailureAt("https://ha.exemple.fr/", Socket(SocketError.ConnectionRefused));
+
+        Assert.Contains("port 443", problem.Message);
+        Assert.Contains("https://ha.exemple.fr:8123", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_ConnectionRefused_On8123_DoesNotSuggestTheSamePort()
+    {
+        var problem = await FailureAt("https://192.168.1.10:8123/", Socket(SocketError.ConnectionRefused));
+
+        Assert.Contains("port 8123", problem.Message);
+        Assert.DoesNotContain("essaie", problem.Message);
+    }
+
+    public static TheoryData<HttpRequestException> CutConnections =>
+    [
+        new HttpRequestException(HttpRequestError.ResponseEnded, "fin prématurée"),
+        Socket(SocketError.ConnectionReset, HttpRequestError.Unknown),
+        Socket(SocketError.ConnectionAborted, HttpRequestError.Unknown),
+    ];
+
+    [Theory]
+    [MemberData(nameof(CutConnections))]
+    public async Task Get_ConnectionCutOnHttp_SuggestsHttps(HttpRequestException failure)
+    {
+        var problem = await FailureAt("http://192.168.1.10:8123/", failure);
+
+        Assert.Contains("https://192.168.1.10:8123", problem.Message);
+    }
+
+    [Theory]
+    [MemberData(nameof(CutConnections))]
+    public async Task Get_ConnectionCutOnHttps_StaysGeneric(HttpRequestException failure)
+    {
+        var problem = await FailureAt("https://192.168.1.10:8123/", failure);
+
+        Assert.Contains("injoignable", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_AccessDenied_PointsToThePermissions()
+    {
+        var problem = await FailureAt("https://ha.exemple.fr:8123/", Socket(SocketError.AccessDenied));
+
+        Assert.Contains("ha.exemple.fr", problem.Message);
+        Assert.Contains("Réseau local", problem.Message);
+        Assert.Contains("Internet", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_Timeout_SaysWhereNothingAnswers()
+    {
+        var problem = await FailureAt("https://192.168.1.10:8123/", new TaskCanceledException("timeout"));
+
+        Assert.Contains("ne répond pas", problem.Message);
+        Assert.Contains("192.168.1.10:8123", problem.Message);
+        Assert.Contains("permission", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_SocketTimeout_SaysWhereNothingAnswers()
+    {
+        var problem = await FailureAt("https://192.168.1.10:8123/", Socket(SocketError.TimedOut));
+
+        Assert.Contains("ne répond pas", problem.Message);
+        Assert.Contains("192.168.1.10:8123", problem.Message);
+    }
+
+    [Fact]
+    public async Task Get_5xx_GivesTheStatus()
+    {
+        var fake = new FakeHomeAssistant();
+        fake.Responses["/api/states/sensor.x"] = (502, "<html>Bad Gateway</html>");
+        using var client = Create(fake);
+
+        var problem = await ProblemOf(() => client.GetStateAsync("sensor.x", CancellationToken.None));
+
+        Assert.Contains("502", problem.Message);
+        Assert.True(problem.Message.Length < 200, problem.Message);
     }
 
     [Fact]

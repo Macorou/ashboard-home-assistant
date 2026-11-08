@@ -9,12 +9,13 @@ public sealed class ModuleActionsTests
     private static string ManifestPath => Path.Combine(AppContext.BaseDirectory, "manifest.json");
 
     /// <summary>Un hôte sans réglages (comme la fenêtre de réglage pour une recherche) ; <c>Probe</c> donne l'instance, créée au démarrage de l'hôte (les tests le démarrent, la sonde est posée avant).</summary>
-    private static (ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe) Host(FakeHomeAssistant ha, string? url = "192.168.1.10:8123", string? token = "abc", IReadOnlyList<ModulePermission>? granted = null)
+    private static (ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe) Host(FakeHomeAssistant ha, string? url = "192.168.1.10:8123", string? token = "abc", IReadOnlyList<ModulePermission>? granted = null, string? settingsJson = null)
     {
         TestableModule.Handler.Value = ha;
         var probe = new TestableModule.Holder();
         TestableModule.Probe.Value = probe;
-        var host = new ModuleTestHost<TestableModule>(ManifestPath, default(JsonElement), granted);
+        var settings = settingsJson is null ? default : JsonDocument.Parse(settingsJson).RootElement;
+        var host = new ModuleTestHost<TestableModule>(ManifestPath, settings, granted);
         if (url is not null)
         {
             host.Secrets.Set("ha_url", url);
@@ -79,6 +80,34 @@ public sealed class ModuleActionsTests
         var results = await probe.Module!.LookupAsync("solar", "", CancellationToken.None);
 
         Assert.Contains("injoignable", Assert.Single(results).Label);
+    }
+
+    [Fact]
+    public async Task Lookup_UsesTheRememberedAddress_WhenSettingsAreEmpty()
+    {
+        var ha = new FakeHomeAssistant();
+        ha.Responses["/api/states"] = (200, StatesJson);
+        var (host, probe) = Host(ha, "192.168.1.30:8123");
+        await using var _ = host;
+        await host.StartAsync();
+
+        await probe.Module!.LookupAsync("solar", "sol", CancellationToken.None);
+
+        Assert.Equal("192.168.1.30", Assert.Single(ha.Requests).RequestUri!.Host);
+    }
+
+    [Fact]
+    public async Task Test_UsesTheAddressTypedInTheSettings()
+    {
+        var ha = new FakeHomeAssistant();
+        ha.Responses["/api/"] = (200, """{"message":"API running."}""");
+        var (host, probe) = Host(ha, "192.168.1.10:8123", settingsJson: """{ "ha_address": "https://192.168.1.20:8123" }""");
+        await using var _ = host;
+        await host.StartAsync();
+
+        await probe.Module!.RunActionAsync("test", CancellationToken.None);
+
+        Assert.Equal("https://192.168.1.20:8123/api/", Assert.Single(ha.Requests).RequestUri!.ToString());
     }
 
     [Fact]
