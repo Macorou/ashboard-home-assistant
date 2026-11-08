@@ -128,7 +128,7 @@ public sealed class ModuleStartupTests
     [Fact]
     public async Task Start_HostnameWithOnePermission_TriesToConnect()
     {
-        // Aucune connexion n'existe avant la tâche 7 : on vérifie seulement que la permission a passé, le module s'arrête au capteur.
+        // On vérifie seulement que la permission a passé : sans capteur choisi, le module s'arrête à la configuration, sans requête.
         var ha = new FakeHomeAssistant();
         await using var host = Host(ha, "https://maison.duckdns.org", "jeton", granted: [ModulePermission.Internet]);
 

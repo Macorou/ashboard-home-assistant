@@ -17,41 +17,35 @@ public class HomeAssistantModule : CommunityModule
     /// </summary>
     internal virtual HttpClient CreateHttpClient(string? certificateKey) => Services.CreateHttpClient(certificateKey);
 
-    /// <summary>Vérifie la configuration de la case ; ne lance aucune requête.</summary>
+    private ICard? _card;
+
+    /// <summary>La carte affichée dans la case, ou null tant que le module n'est pas configuré. Les tests la lisent.</summary>
+    internal ICard? Card => _card;
+
+    private const string StartupFillConnection = "Indique l'adresse de Home Assistant et ta clé API dans les réglages du module.";
+
+    /// <summary>Vérifie la configuration de la case, choisit la carte d'après le réglage « display » et lance sa lecture.</summary>
     public override Task StartAsync(CancellationToken ct)
     {
-        var url = (Services.Secrets.Get("ha_url") ?? "").Trim();
-        var token = (Services.Secrets.Get("ha_token") ?? "").Trim();
-        if (url.Length == 0 || token.Length == 0)
+        var client = CreateClient(StartupFillConnection, checkPermissions: true, out var problem);
+        if (client is null)
         {
-            SetStatus(ModuleHealth.NotConfigured, "Indique l'adresse de Home Assistant et ta clé API dans les réglages du module.");
+            SetStatus(ModuleHealth.NotConfigured, problem);
             return Task.CompletedTask;
         }
 
-        if (!HaAddress.TryParse(url, out var address))
+        if (!EnergyConfig.TryRead(Services.Settings, out var config, out var configProblem))
         {
-            SetStatus(ModuleHealth.NotConfigured, "L'adresse de Home Assistant n'est pas valide : écris-la comme 192.168.1.10:8123 ou https://maison.exemple.fr.");
+            client.Dispose();
+            SetStatus(ModuleHealth.NotConfigured, configProblem);
             return Task.CompletedTask;
         }
 
-        if (address.IsLocalhost)
-        {
-            SetStatus(ModuleHealth.NotConfigured, "Une adresse localhost n'est pas prise en charge : indique l'adresse réseau de ton Home Assistant, par exemple 192.168.1.10:8123.");
-            return Task.CompletedTask;
-        }
-
-        var permissionMessage = MissingPermissionMessage(address);
-        if (permissionMessage is not null)
-        {
-            SetStatus(ModuleHealth.NotConfigured, permissionMessage);
-            return Task.CompletedTask;
-        }
-
-        if (SettingsReader.EntityId(Services.Settings, "solar").Length == 0)
-        {
-            SetStatus(ModuleHealth.NotConfigured, "Choisis ton capteur de production dans les réglages du module.");
-        }
-
+        // Une seule carte existe pour l'instant ; le réglage garde la place des suivantes.
+        _ = SettingsReader.Choice(Services.Settings, "display", "energy", "energy");
+        var card = new EnergyCard(new CardContext(Services, client, Invalidate, (health, message) => SetStatus(health, message)), config!);
+        _card = card;
+        card.Start();
         return Task.CompletedTask;
     }
 
@@ -85,13 +79,15 @@ public class HomeAssistantModule : CommunityModule
     /// montrer. Sert aux recherches et aux boutons, qui tournent sur une instance où <c>StartAsync</c> n'a pas eu lieu. L'appelant
     /// libère le client.
     /// </summary>
-    internal HaClient? TryCreateClient(out string? problem)
+    internal HaClient? TryCreateClient(out string? problem) => CreateClient(FillConnectionFirst, checkPermissions: false, out problem);
+
+    private HaClient? CreateClient(string emptyMessage, bool checkPermissions, out string? problem)
     {
         var url = (Services.Secrets.Get("ha_url") ?? "").Trim();
         var token = (Services.Secrets.Get("ha_token") ?? "").Trim();
         if (url.Length == 0 || token.Length == 0)
         {
-            problem = FillConnectionFirst;
+            problem = emptyMessage;
             return null;
         }
 
@@ -104,6 +100,12 @@ public class HomeAssistantModule : CommunityModule
         if (address.IsLocalhost)
         {
             problem = "Une adresse localhost n'est pas prise en charge : indique l'adresse réseau de ton Home Assistant, par exemple 192.168.1.10:8123.";
+            return null;
+        }
+
+        if (checkPermissions && MissingPermissionMessage(address) is { } permissionMessage)
+        {
+            problem = permissionMessage;
             return null;
         }
 
@@ -178,8 +180,16 @@ public class HomeAssistantModule : CommunityModule
             ? ex.Message
             : "Impossible de lire Home Assistant. Vérifie l'adresse, la clé API et les permissions du module.";
 
-    /// <summary>Rien à dessiner tant que les cartes ne sont pas branchées : le logiciel affiche lui-même le message d'état.</summary>
-    public override void Render(SKCanvas canvas, ModuleRenderContext ctx)
+    public override bool IsAnimating => _card?.IsAnimating ?? false;
+
+    public override void Render(SKCanvas canvas, ModuleRenderContext ctx) => _card?.Render(canvas, ctx);
+
+    /// <summary>Arrête la carte, qui attend la fin de sa lecture avant de libérer le client.</summary>
+    public override async ValueTask DisposeAsync()
     {
+        if (_card is { } card)
+        {
+            await card.DisposeAsync().ConfigureAwait(false);
+        }
     }
 }
