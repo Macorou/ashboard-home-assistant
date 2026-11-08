@@ -9,7 +9,7 @@ internal sealed record EnergyState(EnergySnapshot Snapshot, EnergyFlows Flows, b
 
 /// <summary>
 /// La carte d'énergie : relit les capteurs toutes les 3 s (une lecture à la fois), calcule les flux et annonce l'état de santé du module
-/// (spec § 6). Le dessin arrive avec le moteur de rendu.
+/// (spec § 6), puis dessine le résultat avec <see cref="EnergyRenderer"/>.
 /// </summary>
 internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICard
 {
@@ -32,7 +32,9 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
     /// <summary>Le dernier état publié, remplacé en entier ; null tant qu'aucune lecture n'a réussi.</summary>
     internal volatile EnergyState? Current;
 
-    public bool IsAnimating => false;
+    private readonly EnergyRenderer _renderer = new(config);
+
+    public bool IsAnimating => !_closed && _renderer.IsAnimating(Current);
 
     public void Start()
     {
@@ -45,6 +47,10 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
 
     public void Render(SKCanvas canvas, ModuleRenderContext ctx)
     {
+        if (!_closed)
+        {
+            _renderer.Render(canvas, ctx, Current);
+        }
     }
 
     /// <summary>Une unité est inconnue si elle est donnée et n'est ni W ni kW : elle est alors traitée comme des W.</summary>
@@ -188,5 +194,6 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : ICa
         await _refresh.ConfigureAwait(false);
         context.Client.Dispose();
         _stop.Dispose();
+        _renderer.Dispose();
     }
 }

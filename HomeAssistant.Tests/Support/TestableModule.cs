@@ -16,6 +16,15 @@ internal sealed class TestableModule : HomeAssistantModule
         }
     }
 
+    /// <summary>Le thème du dernier dessin, pour que la galerie pose l'image sur le fond du thème.</summary>
+    public Trofeo.ModuleKit.Theme? LastTheme { get; private set; }
+
+    public override void Render(SkiaSharp.SKCanvas canvas, Trofeo.ModuleKit.ModuleRenderContext ctx)
+    {
+        LastTheme = ctx.Theme;
+        base.Render(canvas, ctx);
+    }
+
     internal override HttpClient CreateHttpClient(string? certificateKey) =>
         new(Handler.Value ?? throw new InvalidOperationException("Pose TestableModule.Handler avant StartAsync."), disposeHandler: false);
 
