@@ -15,11 +15,19 @@ internal sealed class FakeHomeAssistant : HttpMessageHandler
     /// <summary>Appelée avant chaque réponse : permet de simuler un serveur lent ou de bloquer jusqu'à l'annulation.</summary>
     public Func<CancellationToken, Task>? Delay { get; set; }
 
+    /// <summary>Si posée, chaque requête échoue avec cette exception (panne réseau, échec TLS).</summary>
+    public Exception? Failure { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
             Requests.Add(request);
+        }
+
+        if (Failure is { } failure)
+        {
+            throw failure;
         }
 
         if (Delay is { } delay)
