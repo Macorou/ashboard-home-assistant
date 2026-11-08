@@ -242,6 +242,36 @@ public sealed class HaClientTests
         Assert.Equal("/api/", fake.Requests.Single().RequestUri!.PathAndQuery);
     }
 
+    [Theory]
+    [InlineData(502)]
+    [InlineData(503)]
+    [InlineData(504)]
+    public async Task Get_5xx_IsUnreachable(int status)
+    {
+        var fake = new FakeHomeAssistant();
+        fake.Responses["/api/states/sensor.x"] = (status, "<html>Bad Gateway</html>");
+        using var client = Create(fake);
+
+        var problem = await ProblemOf(() => client.GetStateAsync("sensor.x", CancellationToken.None));
+
+        Assert.Equal(HaProblemKind.Unreachable, problem.Kind);
+    }
+
+    [Theory]
+    [InlineData("ab\ncd")]
+    [InlineData("abé")]
+    [InlineData("   ")]
+    public async Task Token_NotUsableInHeader_IsUnauthorizedWithoutRequest(string token)
+    {
+        var fake = new FakeHomeAssistant();
+        using var client = Create(fake, token);
+
+        var problem = await ProblemOf(() => client.GetStateAsync("sensor.x", CancellationToken.None));
+
+        Assert.Equal(HaProblemKind.Unauthorized, problem.Kind);
+        Assert.Empty(fake.Requests);
+    }
+
     [Fact]
     public async Task Ping_401_IsUnauthorized()
     {

@@ -63,7 +63,7 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
     private async Task<string> SendAsync(string path, string? entityId, CancellationToken ct)
     {
         var token = (readToken() ?? "").Trim();
-        if (token.Length == 0)
+        if (token.Length == 0 || !token.All(c => c is > ' ' and < '\u007f'))
         {
             throw Unauthorized();
         }
@@ -80,6 +80,11 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
                     throw Unauthorized();
                 case HttpStatusCode.NotFound when entityId is not null:
                     throw new HaProblem(HaProblemKind.EntityNotFound, $"Home Assistant ne connaît pas l'entité {entityId}. Vérifie son nom dans les réglages.", entityId);
+            }
+
+            if ((int)response.StatusCode >= 500)
+            {
+                throw Unreachable(null);
             }
 
             if (!response.IsSuccessStatusCode)
@@ -167,6 +172,6 @@ internal sealed class HaClient(HttpClient http, Func<string?> readToken) : IDisp
     private static HaProblem Unauthorized() =>
         new(HaProblemKind.Unauthorized, "Home Assistant refuse ta clé API. Crée une nouvelle clé API dans ton profil Home Assistant et colle-la dans les réglages.");
 
-    private static HaProblem Unreachable(Exception inner) =>
+    private static HaProblem Unreachable(Exception? inner) =>
         new(HaProblemKind.Unreachable, "Home Assistant est injoignable. Vérifie l'adresse et les permissions du module (réseau local ou internet).", inner: inner);
 }
