@@ -5,8 +5,8 @@ using Trofeo.ModuleKit;
 
 namespace HomeAssistant;
 
-/// <summary>Ce que cherche un champ de recherche : une puissance (W, kW), un pourcentage (niveau de batterie), une énergie (Wh, kWh, MWh), un montant, un prix au kWh ou un volume d'eau (L, m³).</summary>
-internal enum EntityKind { Power, Percent, Energy, Money, Price, Water }
+/// <summary>Ce que cherche un champ de recherche : une puissance (W, kW), un pourcentage (niveau de batterie), une énergie (Wh, kWh, MWh), un montant, un prix au kWh ou un volume d'eau (L, m³) ou un capteur on/off « voiture branchée » (<c>binary_sensor.*</c>).</summary>
+internal enum EntityKind { Power, Percent, Energy, Money, Price, Water, Plug }
 
 /// <summary>Filtre, trie et met en forme les capteurs proposés par les champs de recherche des réglages.</summary>
 internal static class EntityCatalog
@@ -19,16 +19,18 @@ internal static class EntityCatalog
     /// </summary>
     public static EntityKind KindFor(string fieldKey) => fieldKey switch
     {
-        "battery_soc" or "battery_soc2" => EntityKind.Percent,
+        "battery_soc" or "battery_soc2" or "car_soc" => EntityKind.Percent,
         "day_consumption" or "day_production" or "day_import" or "day_export" or "day_car" => EntityKind.Energy,
         "day_water" => EntityKind.Water,
         "day_cost" => EntityKind.Money,
         "day_price_sensor" => EntityKind.Price,
+        "car_plug" => EntityKind.Plug,
         _ => EntityKind.Power,
     };
 
     /// <summary>
-    /// Au plus <see cref="MaxResults"/> capteurs <c>sensor.*</c> du bon genre dont le nom ou l'identifiant contient la recherche (sans
+    /// Au plus <see cref="MaxResults"/> capteurs <c>sensor.*</c> du bon genre (<c>binary_sensor.*</c> pour un capteur « branchée »; ceux de
+    /// classe <c>plug</c> ou <c>battery_charging</c> passent en tête) dont le nom ou l'identifiant contient la recherche (sans
     /// accents ni casse). D'abord ceux dont le nom ou l'identifiant commence par la recherche, puis les autres, chaque groupe par nom ;
     /// pour un pourcentage, les capteurs de batterie passent avant tous les autres ; pour une énergie, un coût, un prix ou de l'eau, ceux dont le nom
     /// ou l'identifiant évoque le jour (<c>jour</c>, <c>journ</c>, <c>today</c>, <c>daily</c>) passent en tête.
@@ -36,12 +38,14 @@ internal static class EntityCatalog
     public static IReadOnlyList<LookupResult> Search(IEnumerable<HaState> states, EntityKind kind, string query)
     {
         var needle = Normalize((query ?? "").Trim());
+        var prefix = kind == EntityKind.Plug ? "binary_sensor." : "sensor.";
 
         return states
-            .Where(s => s.EntityId.StartsWith("sensor.", StringComparison.Ordinal) && IsOfKind(s, kind))
-            .Select(s => (State: s, Name: NameOf(s), Key: Normalize(NameOf(s)), Id: Normalize(s.EntityId), ShortId: Normalize(s.EntityId["sensor.".Length..])))
+            .Where(s => s.EntityId.StartsWith(prefix, StringComparison.Ordinal) && IsOfKind(s, kind))
+            .Select(s => (State: s, Name: NameOf(s), Key: Normalize(NameOf(s)), Id: Normalize(s.EntityId), ShortId: Normalize(s.EntityId[prefix.Length..])))
             .Where(e => needle.Length == 0 || e.Key.Contains(needle, StringComparison.Ordinal) || e.Id.Contains(needle, StringComparison.Ordinal))
             .OrderBy(e => kind == EntityKind.Percent && e.State.DeviceClass == "battery" ? 0 : 1)
+            .ThenBy(e => kind == EntityKind.Plug && e.State.DeviceClass is "plug" or "battery_charging" ? 0 : 1)
             .ThenBy(e => kind is EntityKind.Energy or EntityKind.Money or EntityKind.Price or EntityKind.Water && IsDaily(e.Key, e.Id) ? 0 : 1)
             .ThenBy(e => e.Key.StartsWith(needle, StringComparison.Ordinal) || e.ShortId.StartsWith(needle, StringComparison.Ordinal) ? 0 : 1)
             .ThenBy(e => e.Key, StringComparer.Ordinal)
@@ -58,6 +62,7 @@ internal static class EntityCatalog
         EntityKind.Money => state.DeviceClass == "monetary" || IsUnit(state, "€", "EUR"),
         EntityKind.Price => state.Unit is not null && state.Unit.EndsWith("/kWh", StringComparison.OrdinalIgnoreCase),
         EntityKind.Water => state.DeviceClass == "water" || IsUnit(state, "L", "m³", "m3"),
+        EntityKind.Plug => true,
         _ => state.Unit == "%",
     };
 

@@ -224,7 +224,32 @@ public sealed class EntityCatalogTests
         Assert.Equal(["sensor.sejour_x", "sensor.alpha"], Ids(EntityCatalog.Search(states, EntityKind.Energy, "")));
     }
 
+    [Fact]
+    public void Search_Plug_KeepsBinarySensors_PlugFirst()
+    {
+        var states = new[]
+        {
+            S("binary_sensor.door", "off", null, "Door", "door"),
+            S("binary_sensor.car_plug", "on", null, "Car plug", "plug"),
+            S("binary_sensor.charging", "off", null, "Charging", "battery_charging"),
+            S("sensor.x", "5", "W", "X"),
+        };
+
+        Assert.Equal(["binary_sensor.car_plug", "binary_sensor.charging", "binary_sensor.door"], Ids(EntityCatalog.Search(states, EntityKind.Plug, "")));
+    }
+
+    [Fact]
+    public void Search_Plug_MatchesQuery_OnShortId()
+    {
+        var states = new[] { S("binary_sensor.car_plug", "on", null), S("binary_sensor.door", "off", null) };
+
+        Assert.Equal(["binary_sensor.car_plug"], Ids(EntityCatalog.Search(states, EntityKind.Plug, "car")));
+    }
+
     [Theory]
+    [InlineData("car_plug", "Plug")]
+    [InlineData("car_soc", "Percent")]
+    [InlineData("car_power", "Power")]
     [InlineData("battery_soc", "Percent")]
     [InlineData("battery_soc2", "Percent")]
     [InlineData("solar", "Power")]

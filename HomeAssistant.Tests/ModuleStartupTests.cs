@@ -121,6 +121,44 @@ public sealed class ModuleStartupTests
     }
 
     [Fact]
+    public void Manifest_CarFields_FollowBatteryFields_InOrder()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var keys = ManifestFields(manifest).Select(f => f.GetProperty("key").GetString()!).ToList();
+
+        var start = keys.IndexOf("battery_soc2") + 1;
+        Assert.Equal(["car_mode", "car_power", "car_plug", "car_soc", "car_color"], keys.GetRange(start, 5));
+    }
+
+    [Fact]
+    public void Manifest_CarFields_Visibility()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        var fields = ManifestFields(manifest);
+
+        var mode = Field(fields, "car_mode");
+        AssertVisibleWhen(mode, "display", "energy");
+        Assert.Equal(["none", "one"], mode.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("value").GetString()!).ToArray());
+        Assert.Equal("none", mode.GetProperty("default").GetString());
+
+        foreach (var key in new[] { "car_power", "car_plug", "car_soc", "car_color" })
+        {
+            AssertVisibleWhen(Field(fields, key), "car_mode", "one");
+        }
+
+        var color = Field(fields, "car_color");
+        Assert.Equal(["blue", "yellow", "white"], color.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("value").GetString()!).ToArray());
+        Assert.Equal("blue", color.GetProperty("default").GetString());
+    }
+
+    [Fact]
+    public void Manifest_Version_Is_1_3_0()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+        Assert.Equal("1.3.0", manifest.RootElement.GetProperty("version").GetString());
+    }
+
+    [Fact]
     public void Manifest_GridFields_FollowDisplay()
     {
         using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
