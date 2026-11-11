@@ -99,7 +99,7 @@ public sealed class EnergyRendererTests
         var layout = EnergyLayouts.Get(Enum.Parse<LayoutKind>(name), true);
 
         Assert.Equal(6, layout.Flows.Count);
-        Assert.Equal(Enum.GetValues<FlowKey>().OrderBy(k => k), layout.Flows.Select(f => f.Key).OrderBy(k => k));
+        Assert.Equal(Enum.GetValues<FlowKey>().Where(k => k != FlowKey.HomeToCar).OrderBy(k => k), layout.Flows.Select(f => f.Key).OrderBy(k => k));
         Assert.Contains(layout.Arts, a => a.Kind == ArtKind.Battery);
         Assert.Contains(layout.Texts, t => t.Role == "batValue");
     }
@@ -118,7 +118,66 @@ public sealed class EnergyRendererTests
         Assert.DoesNotContain(layout.Flows, f => f.Key is FlowKey.SolarToBattery or FlowKey.BatteryToHome or FlowKey.GridToBattery);
     }
 
+    public static TheoryData<string, bool> LayoutCombos => new()
+    {
+        { nameof(LayoutKind.Top), false }, { nameof(LayoutKind.Top), true },
+        { nameof(LayoutKind.Left), false }, { nameof(LayoutKind.Left), true },
+        { nameof(LayoutKind.Bottom), false }, { nameof(LayoutKind.Bottom), true },
+    };
+
+    private static bool Inside(float x, float y) => x >= 0 && x <= EnergyLayouts.Width && y >= 0 && y <= EnergyLayouts.Height;
+
+    [Theory]
+    [MemberData(nameof(LayoutCombos))]
+    public void Layouts_WithCar_AddCarArt_Flow_AndSlots(string layout, bool battery)
+    {
+        var result = EnergyLayouts.Get(Enum.Parse<LayoutKind>(layout), battery, true);
+
+        var car = Assert.Single(result.Arts, a => a.Kind == ArtKind.CarBlue);
+        var width = 106 * car.Scale;
+        var height = 86 * car.Scale;
+        Assert.True(Inside(car.X, car.Y) && Inside(car.X + width, car.Y + height));
+
+        var house = Assert.Single(result.Arts, a => a.Kind == ArtKind.HouseModern);
+        var flow = Assert.Single(result.Flows, f => f.Key == FlowKey.HomeToCar);
+        Assert.Equal(SKColor.Parse("#ff7eb6"), flow.Color);
+        var start = flow.Bezier[0];
+        Assert.InRange(start.X, house.X - 40, house.X + 200 * house.Scale + 40);
+        Assert.InRange(start.Y, house.Y - 40, house.Y + 180 * house.Scale + 40);
+        Assert.All(flow.Bezier, p => Assert.True(Inside(p.X, p.Y)));
+
+        Assert.Single(result.Texts, t => t.Role == "carLabel");
+        Assert.Single(result.Texts, t => t.Role == "carValue");
+        Assert.All(result.Texts, t => Assert.True(Inside(t.X, t.Y)));
+    }
+
+    [Theory]
+    [MemberData(nameof(LayoutCombos))]
+    public void Layouts_WithoutCar_AreUnchanged(string layout, bool battery)
+    {
+        var kind = Enum.Parse<LayoutKind>(layout);
+        var old = EnergyLayouts.Get(kind, battery);
+        var without = EnergyLayouts.Get(kind, battery, false);
+
+        Assert.Equal(old.Arts, without.Arts);
+        Assert.Equal(old.Texts, without.Texts);
+        Assert.Equal(old.Flows.Select(f => (f.Key, f.Color)), without.Flows.Select(f => (f.Key, f.Color)));
+        Assert.Equal(old.Flows.SelectMany(f => f.Bezier), without.Flows.SelectMany(f => f.Bezier));
+    }
+
     // ----- Filaments -----
+
+    [Fact]
+    public void Filament_HomeToCar_HasItsOwnChannel()
+    {
+        using var painter = new FilamentPainter();
+        var flows = new EnergyFlows(0, 0, 0, 0, 0, 0, 500, 0, 0, HomeToCar: 7400);
+
+        painter.Advance(1, flows);
+
+        Assert.Equal(FilamentPainter.SpeedFor(7400), painter.PhaseOf(FlowKey.HomeToCar), 6);
+        Assert.Equal(FilamentPainter.SpeedFor(500), painter.PhaseOf(FlowKey.GridToBattery, true), 6);
+    }
 
     private static SKBitmap DrawFilaments(FilamentPainter painter, EnergyFlows flows)
     {

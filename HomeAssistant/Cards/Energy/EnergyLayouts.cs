@@ -2,7 +2,7 @@ using SkiaSharp;
 
 namespace HomeAssistant;
 
-internal enum FlowKey { SolarToHome, SolarToGrid, GridToHome, SolarToBattery, BatteryToHome, GridToBattery }
+internal enum FlowKey { SolarToHome, SolarToGrid, GridToHome, SolarToBattery, BatteryToHome, GridToBattery, HomeToCar }
 
 /// <summary>Un dessin posé dans l'espace 700 × 434 : le groupe SVG <c>translate(X,Y) scale(Scale)</c> de la maquette. La maison est toujours posée en <see cref="ArtKind.HouseModern"/> : le moteur la remplace selon le style choisi.</summary>
 internal sealed record ArtPlacement(ArtKind Kind, float X, float Y, float Scale);
@@ -12,7 +12,7 @@ internal sealed record FlowPath(FlowKey Key, SKColor Color, SKPoint[] Bezier);
 
 /// <summary>
 /// Un emplacement de texte. Rôles : <c>solarLabel</c>, <c>solarValue</c>, <c>homeLabel</c>, <c>homeValue</c>, <c>gridLabel</c>, <c>gridValue</c>,
-/// <c>batLabel</c>, <c>batValue</c> et <c>share</c> (la part solaire sur sa propre ligne ; absent, elle suit « Consommation · »).
+/// <c>batLabel</c>, <c>batValue</c>, <c>carLabel</c>, <c>carValue</c> et <c>share</c> (la part solaire sur sa propre ligne ; absent, elle suit « Consommation · »).
 /// </summary>
 internal sealed record TextSlot(string Role, float X, float Y, bool Centered, float Size);
 
@@ -32,14 +32,22 @@ internal static class EnergyLayouts
     private static readonly SKColor Orange = SKColor.Parse("#ff7a45");
     private static readonly SKColor Violet = SKColor.Parse("#b58cff");
 
-    private static readonly Dictionary<(LayoutKind, bool), EnergyLayout> Cache = [];
+    private static readonly SKColor Pink = SKColor.Parse("#ff7eb6");
 
-    internal static EnergyLayout Get(LayoutKind kind, bool withBattery)
+    private static readonly Dictionary<(LayoutKind, bool, bool), EnergyLayout> Cache = [];
+
+    internal static EnergyLayout Get(LayoutKind kind, bool withBattery) => Get(kind, withBattery, false);
+
+    internal static EnergyLayout Get(LayoutKind kind, bool withBattery, bool withCar)
     {
         lock (Cache)
         {
-            if (!Cache.TryGetValue((kind, withBattery), out var layout))
-                Cache[(kind, withBattery)] = layout = Build(kind, withBattery);
+            if (!Cache.TryGetValue((kind, withBattery, withCar), out var layout))
+            {
+                layout = Build(kind, withBattery);
+                if (withCar) layout = WithCar(layout, kind, withBattery);
+                Cache[(kind, withBattery, withCar)] = layout;
+            }
             return layout;
         }
     }
@@ -61,6 +69,75 @@ internal static class EnergyLayouts
 
     private static FlowPath Flow(FlowKey key, SKColor color, float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) =>
         new(key, color, [new(x0, y0), new(x1, y1), new(x2, y2), new(x3, y3)]);
+
+    /// <summary>La voiture posée par son centre : le dessin occupe environ 106 × 86 dans sa boîte, l'échelle vient de la largeur voulue.</summary>
+    private static ArtPlacement CarArt(float width, float centerX, float centerY)
+    {
+        var scale = width / 106;
+        return Art(ArtKind.CarBlue, centerX - width / 2, centerY - 86 * scale / 2, scale);
+    }
+
+    private static readonly string[] BatteryRoles = ["solarLabel", "solarValue", "batLabel", "batValue", "gridLabel", "gridValue"];
+
+    /// <summary>Ajoute la voiture électrique, son flux maison vers voiture et ses textes à une disposition de base ; les colonnes de texte qui la gênent sont recomposées.</summary>
+    private static EnergyLayout WithCar(EnergyLayout baseLayout, LayoutKind kind, bool bat)
+    {
+        ArtPlacement car;
+        FlowPath flow;
+        List<TextSlot> texts = [.. baseLayout.Texts];
+
+        switch (kind)
+        {
+            case LayoutKind.Top:
+                car = CarArt(110, 340, 388);
+                flow = Flow(FlowKey.HomeToCar, Pink, 226, 330, 250, 352, 270, 362, 290, 368);
+                texts.Add(Label("carLabel", 412, 380, false));
+                texts.Add(Value("carValue", 412, 414, false, 28));
+                break;
+
+            case LayoutKind.Left:
+                car = CarArt(128, 312, 372);
+                flow = Flow(FlowKey.HomeToCar, Pink, 262, 262, 278, 290, 292, 312, 300, 330);
+                if (bat)
+                {
+                    // Colonne de droite sur quatre lignes : production, batterie, voiture, réseau.
+                    texts.RemoveAll(t => Array.IndexOf(BatteryRoles, t.Role) >= 0);
+                    string[] rows = ["solar", "bat", "car", "grid"];
+                    for (var i = 0; i < rows.Length; i++)
+                    {
+                        var y = 44 + i * 108;
+                        texts.Add(Label(rows[i] + "Label", 515, y, false));
+                        texts.Add(Value(rows[i] + "Value", 515, y + 44, false, 38));
+                    }
+                }
+                else
+                {
+                    texts.Add(Label("carLabel", 515, 196, false));
+                    texts.Add(Value("carValue", 515, 244, false, 42));
+                }
+                break;
+
+            default:
+                // Au sol, à droite de la maison ; les textes de droite se resserrent au-dessus de la voiture (à régler sur la galerie).
+                car = CarArt(100, 590, 392);
+                flow = Flow(FlowKey.HomeToCar, Pink, 470, 378, 495, 384, 518, 390, 544, 394);
+                texts.RemoveAll(t => t.Role is "gridLabel" or "gridValue" or "batLabel" or "batValue");
+                if (bat)
+                {
+                    texts.Add(Label("gridLabel", 595, 186, true)); texts.Add(Value("gridValue", 595, 220, true, 32));
+                    texts.Add(Label("batLabel", 595, 242, true)); texts.Add(Value("batValue", 595, 276, true, 32));
+                    texts.Add(Label("carLabel", 595, 298, true)); texts.Add(Value("carValue", 595, 332, true, 32));
+                }
+                else
+                {
+                    texts.Add(Label("gridLabel", 595, 196, true)); texts.Add(Value("gridValue", 595, 232, true, 34));
+                    texts.Add(Label("carLabel", 595, 284, true)); texts.Add(Value("carValue", 595, 320, true, 34));
+                }
+                break;
+        }
+
+        return new EnergyLayout([.. baseLayout.Arts, car], [.. baseLayout.Flows, flow], texts, baseLayout.Halos);
+    }
 
     private static EnergyLayout TopNoBat() => new(
         [Art(ArtKind.Panels, 265, 0, .85f), Art(ArtKind.HouseModern, 55, 205, .9f), Art(ArtKind.Pylon, 490, 225, .9f)],

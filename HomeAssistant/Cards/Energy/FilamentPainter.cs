@@ -19,8 +19,8 @@ internal sealed class FilamentPainter : IDisposable
 
     private const float GlowExtra = 2.6f;
     private const float GlowOpacity = .22f;
-    private const int Channels = 7;
-    private const int BatteryToGridChannel = 6;
+    private const int Channels = 8;
+    private const int BatteryToGridChannel = 7;
 
     private static readonly SKColor BatteryViolet = SKColor.Parse("#b58cff");
 
@@ -59,6 +59,7 @@ internal sealed class FilamentPainter : IDisposable
         FlowKey.SolarToBattery => flows.SolarToBattery,
         FlowKey.BatteryToHome => flows.BatteryToHome,
         FlowKey.GridToBattery => flows.GridToBattery,
+        FlowKey.HomeToCar => flows.HomeToCar,
         _ => 0,
     };
 
@@ -76,15 +77,21 @@ internal sealed class FilamentPainter : IDisposable
         }
     }
 
-    public void Draw(SKCanvas canvas, EnergyLayout layout, EnergyFlows flows)
+    /// <param name="carLineOpacity">
+    /// Le tracé de la voiture : <c>-1</c> garde la règle habituelle ; <c>0</c> ne le trace pas ; toute autre valeur fixe l'opacité de sa ligne de fond
+    /// tant que son flux est nul (un flux actif garde la ligne et les filaments habituels).
+    /// </param>
+    public void Draw(SKCanvas canvas, EnergyLayout layout, EnergyFlows flows, float carLineOpacity = -1)
     {
         foreach (var path in layout.Flows)
         {
             var forward = PowerOf(flows, path.Key);
             var backward = path.Key == FlowKey.GridToBattery ? flows.BatteryToGrid : 0;
+            if (path.Key == FlowKey.HomeToCar && carLineOpacity == 0) continue;
             var table = TableFor(path);
 
-            _line.Color = (forward > 0 || backward <= 0 ? path.Color : BatteryViolet).WithAlpha(Alpha(forward > 0 || backward > 0 ? ActiveLineOpacity : IdleLineOpacity));
+            var idle = path.Key == FlowKey.HomeToCar && carLineOpacity > 0 ? carLineOpacity : IdleLineOpacity;
+            _line.Color = (forward > 0 || backward <= 0 ? path.Color : BatteryViolet).WithAlpha(Alpha(forward > 0 || backward > 0 ? ActiveLineOpacity : idle));
             canvas.DrawPath(table.Path, _line);
 
             if (forward > 0) DrawComets(canvas, table, path.Color, _phase[(int)path.Key], reverse: false);
