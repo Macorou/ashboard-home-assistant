@@ -31,6 +31,7 @@ Chaque case affiche l'une de ces deux cartes, au choix :
 
 Pour la carte Flux d'énergie :
 
+- Une **voiture électrique** facultative, posée au sol près de la maison, avec la puissance de sa recharge. Voir la section [Voiture électrique](#voiture-électrique).
 - Trois dispositions : pointe du triangle en haut, maison à gauche, ou maison en bas.
 - Deux styles de maison : contemporaine ou traditionnelle.
 - Trois thèmes, pour les deux cartes : classique, liquid-glass et pixel.
@@ -97,6 +98,34 @@ Tous les capteurs se choisissent dans une liste : tape quelques lettres de leur 
 - **Deux capteurs, charge et décharge** : un capteur pour la charge, un pour la décharge. Leurs valeurs sont toujours positives.
 
 Dans les deux cas, tu peux ajouter le **niveau de la batterie, en %**. Sans lui, la jauge reste éteinte et le pourcentage n'est pas affiché.
+
+### Voiture électrique
+
+<p align="center">
+  <img src="docs/images/carte-voiture.png" alt="La carte Flux d'énergie avec une voiture électrique en charge : un flux rose part de la maison vers la voiture." width="520">
+</p>
+
+Pour la carte Flux d'énergie seulement. Par défaut, « Pas de voiture » : aucun autre champ voiture n'apparaît. Avec « Une voiture », une petite voiture électrique est dessinée au sol, près de la maison, avec un flux de courant rose de la maison vers elle. Cinq réglages :
+
+- **Voiture électrique** : « Pas de voiture » (par défaut) ou « Une voiture ».
+- **Capteur de puissance de recharge** : la puissance que tire la voiture, en W ou en kW, par exemple `sensor.car_power`. C'est le seul capteur obligatoire.
+- **Capteur « voiture branchée » (facultatif)** : un capteur on/off qui dit si la voiture est branchée, par exemple `binary_sensor.car_plug`.
+- **Niveau de la voiture, en % (facultatif)** : par exemple `sensor.car_soc`. Sans lui, le pourcentage n'est pas affiché.
+- **Couleur de la voiture** : bleu vif (par défaut), jaune ou blanc nacré.
+
+La consommation de la maison **comprend déjà** la recharge de la voiture : le module ne l'ajoute jamais à ce chiffre. Le flux rose va de la maison vers la voiture, comme une part de ce que la maison consomme.
+
+La voiture a trois aspects :
+
+- **Débranchée** : la voiture est atténuée, sans badge ni flux, et sa valeur est en gris.
+- **Branchée** : un badge de prise apparaît, le flux est une ligne très discrète, et la valeur est en rose pâle.
+- **En charge** : un badge éclair rose pulse, le flux rose est animé, et la valeur est en rose.
+
+Le texte de la voiture suit l'aspect : « Voiture · en charge · 86 % », « Voiture · branchée · 86 % » ou « Voiture · débranchée · 86 % ». Le pourcentage n'apparaît que si tu as choisi le capteur de niveau.
+
+La voiture est **en charge** dès que sa puissance lue atteint **50 W**, quoi que dise le capteur « branchée ». Ce seuil évite qu'un petit bruit de mesure fasse passer la voiture en charge. Sans capteur « branchée », une voiture qui ne tire rien est montrée « débranchée » : le module ne peut pas savoir qu'elle est branchée sans cela.
+
+Si la puissance est « indisponible » ou « inconnue », la valeur affiche « — » et la carte reste en ligne. Si le niveau est inconnu, le pourcentage disparaît.
 
 ### Ce qui se passe quand un capteur ne répond pas
 

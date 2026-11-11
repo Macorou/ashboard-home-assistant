@@ -57,15 +57,23 @@ public sealed class GalleryTests
         Assert.True(condition(), "La carte n'a pas reçu de lecture en cinq secondes.");
     }
 
-    private static string SettingsJson(string layout, string house, bool battery) =>
+    /// <summary>Une voiture de la galerie : son aspect (nom de fichier), la puissance lue, l'état « branchée », son niveau et sa couleur.</summary>
+    private sealed record CarCase(string Aspect, double Power, string Plug, double Soc, string Color);
+
+    private static readonly CarCase Charging = new("charging", 7400, "on", 86, "blue");
+    private static readonly CarCase Waiting = new("waiting", 0, "on", 86, "blue");
+    private static readonly CarCase Unplugged = new("unplugged", 0, "off", 86, "blue");
+
+    private static string SettingsJson(string layout, string house, bool battery, CarCase? car = null) =>
         $$"""
         { "layout": "{{layout}}", "house": "{{house}}", "solar": { "id": "sensor.pv" }, "grid": { "id": "sensor.grid" }
-          {{(battery ? """, "battery_mode": "one", "battery": { "id": "sensor.bat" }, "battery_soc": { "id": "sensor.soc" }""" : "")}} }
+          {{(battery ? """, "battery_mode": "one", "battery": { "id": "sensor.bat" }, "battery_soc": { "id": "sensor.soc" }""" : "")}}
+          {{(car is null ? "" : $$""", "car_mode": "one", "car_power": { "id": "sensor.car_power" }, "car_plug": { "id": "binary_sensor.car_plug" }, "car_soc": { "id": "sensor.car_soc" }, "car_color": "{{car.Color}}" """)}} }
         """;
 
     /// <summary>Démarre une carte sur les valeurs du scénario, la fait tourner deux secondes (le reflet et les filaments sont alors en vue) et rend chaque taille et chaque thème demandés.</summary>
     private static async Task<List<string>> WriteSetAsync(string directory, string layout, string house, bool battery, Scenario scenario,
-        IEnumerable<(int Columns, int Rows)> sizes, IEnumerable<string> themes, string suffix)
+        IEnumerable<(int Columns, int Rows)> sizes, IEnumerable<string> themes, string suffix, CarCase? car = null, bool colorInName = false)
     {
         var ha = new FakeHomeAssistant();
         Set(ha, "sensor.pv", scenario.Solar);
@@ -76,10 +84,17 @@ public sealed class GalleryTests
             Set(ha, "sensor.soc", scenario.Soc, "%");
         }
 
+        if (car is not null)
+        {
+            Set(ha, "sensor.car_power", car.Power);
+            ha.Responses["/api/states/binary_sensor.car_plug"] = (200, JsonSerializer.Serialize(new { entity_id = "binary_sensor.car_plug", state = car.Plug, attributes = new { } }));
+            Set(ha, "sensor.car_soc", car.Soc, "%");
+        }
+
         TestableModule.Handler.Value = ha;
         var probe = new TestableModule.Holder();
         TestableModule.Probe.Value = probe;
-        await using var host = new ModuleTestHost<TestableModule>(ManifestPath, JsonDocument.Parse(SettingsJson(layout, house, battery)).RootElement);
+        await using var host = new ModuleTestHost<TestableModule>(ManifestPath, JsonDocument.Parse(SettingsJson(layout, house, battery, car)).RootElement);
         host.Secrets.Set("ha_url", "192.168.1.10:8123");
         host.Secrets.Set("ha_token", "abc");
         await host.StartAsync();
@@ -102,7 +117,11 @@ public sealed class GalleryTests
                 using var module = host.Render(new GridSize(columns, rows), theme);
                 Assert.True(HasDrawing(module), $"{layout} {house} {battery} {columns}x{rows} {theme} : rien n'est dessiné");
 
-                var file = Path.Combine(directory, $"{layout}_{house}_{(battery ? "bat" : "nobat")}_{columns}x{rows}_{theme}{suffix}.png");
+                // Une voiture : « {disposition}_{bat|nobat}_car-{aspect}[-{couleur}]_{taille}_{thème}.png » (maison contemporaine, la maison n'est pas dans le nom).
+                var name = car is null
+                    ? $"{layout}_{house}_{(battery ? "bat" : "nobat")}_{columns}x{rows}_{theme}{suffix}.png"
+                    : $"{layout}_{(battery ? "bat" : "nobat")}_car-{car.Aspect}{(colorInName ? "-" + car.Color : "")}_{columns}x{rows}_{theme}.png";
+                var file = Path.Combine(directory, name);
                 SaveOnPanel(module, probe.Module!.LastTheme!, file);
                 written.Add(file);
             }
@@ -204,11 +223,32 @@ public sealed class GalleryTests
             }
         }
 
+        // La voiture : maison contemporaine, scénario « sun ». Chaque disposition, avec et sans batterie, dans les trois aspects en 6 x 4 classique
+        // (la « left » sans batterie en charge est écrite avec les thèmes, plus bas), puis les trois couleurs et les trois tailles.
+        foreach (var layout in Layouts)
+        {
+            foreach (var battery in new[] { false, true })
+            {
+                foreach (var car in new[] { Unplugged, Waiting, Charging })
+                {
+                    if (layout == "left" && !battery && car == Charging) continue;
+                    written.AddRange(await WriteSetAsync(directory, layout, "modern", battery, Scenarios[0], [(6, 4)], ["classique"], "", car));
+                }
+            }
+        }
+
+        written.AddRange(await WriteSetAsync(directory, "left", "modern", false, Scenarios[0], Sizes, Themes, "", Charging));
+        foreach (var color in new[] { "blue", "yellow", "white" })
+        {
+            written.AddRange(await WriteSetAsync(directory, "left", "modern", false, Scenarios[0], [(6, 4)], ["classique"], "", Charging with { Color = color }, true));
+        }
+
         written.AddRange(await WriteDailyAsync(directory, "strip", [(4, 1), (6, 1), (4, 2)]));
         written.AddRange(await WriteDailyAsync(directory, "list", [(2, 3), (2, 4), (3, 4)]));
 
-        // 3 dispositions x 2 maisons x 2 (batterie) x (9 soleil + 2 scénarios), puis 6 tailles du Bilan du jour x 3 thèmes.
-        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + 6 * 3, written.Count);
+        // 3 dispositions x 2 maisons x 2 (batterie) x (9 soleil + 2 scénarios), puis la voiture (3 dispositions x 2 x 3 aspects, 9 tailles et thèmes
+        // pour « left » en charge, 3 couleurs), puis 6 tailles du Bilan du jour x 3 thèmes.
+        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + (3 * 2 * 3 - 1 + 3 * 3 + 3) + 6 * 3, written.Count);
         Assert.All(written, file => Assert.True(new FileInfo(file).Length > 2000, file));
         foreach (var theme in Themes)
         {

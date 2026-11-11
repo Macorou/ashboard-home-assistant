@@ -85,19 +85,31 @@ internal static class EnergyLayouts
         ArtPlacement car;
         FlowPath flow;
         List<TextSlot> texts = [.. baseLayout.Texts];
+        List<FlowPath> flows = [.. baseLayout.Flows];
 
         switch (kind)
         {
             case LayoutKind.Top:
-                car = CarArt(110, 340, 388);
-                flow = Flow(FlowKey.HomeToCar, Pink, 226, 330, 250, 352, 270, 362, 290, 368);
-                texts.Add(Label("carLabel", 412, 380, false));
-                texts.Add(Value("carValue", 412, 414, false, 28));
+                // Voiture plus petite et plus basse : le badge reste sous le flux réseau vers maison, et le texte ne touche pas « Vendu au réseau ».
+                car = CarArt(90, 322, 396);
+                flow = Flow(FlowKey.HomeToCar, Pink, 226, 330, 243, 352, 257, 372, 276, 384);
+                texts.Add(Label("carLabel", 378, 386, false));
+                texts.Add(Value("carValue", 378, 420, false, 28));
+                if (bat)
+                {
+                    // Le flux réseau vers maison prend le tracé sans batterie (au-dessus du badge), et le texte de la batterie remonte d'autant.
+                    flows.RemoveAll(f => f.Key == FlowKey.GridToHome);
+                    flows.Add(Flow(FlowKey.GridToHome, Orange, 526, 282, 450, 335, 330, 340, 203, 317));
+                    texts.RemoveAll(t => t.Role is "batLabel" or "batValue");
+                    texts.Add(Label("batLabel", 350, 288, true));
+                    texts.Add(Value("batValue", 350, 320, true, 34));
+                }
                 break;
 
             case LayoutKind.Left:
-                car = CarArt(128, 312, 372);
-                flow = Flow(FlowKey.HomeToCar, Pink, 262, 262, 278, 290, 292, 312, 300, 330);
+                // Un peu plus bas et à gauche : le flux réseau vers maison passe au-dessus du badge.
+                car = CarArt(112, 290, 385);
+                flow = Flow(FlowKey.HomeToCar, Pink, 258, 262, 268, 290, 276, 312, 282, 332);
                 if (bat)
                 {
                     // Colonne de droite sur quatre lignes : production, batterie, voiture, réseau.
@@ -119,14 +131,14 @@ internal static class EnergyLayouts
 
             default:
                 // Au sol, à droite de la maison ; les textes de droite se resserrent au-dessus de la voiture (à régler sur la galerie).
-                car = CarArt(100, 590, 392);
-                flow = Flow(FlowKey.HomeToCar, Pink, 470, 378, 495, 384, 518, 390, 544, 394);
+                car = CarArt(100, 590, 391);
+                flow = Flow(FlowKey.HomeToCar, Pink, 470, 380, 495, 386, 518, 393, 544, 397);
                 texts.RemoveAll(t => t.Role is "gridLabel" or "gridValue" or "batLabel" or "batValue");
                 if (bat)
                 {
-                    texts.Add(Label("gridLabel", 595, 186, true)); texts.Add(Value("gridValue", 595, 220, true, 32));
-                    texts.Add(Label("batLabel", 595, 242, true)); texts.Add(Value("batValue", 595, 276, true, 32));
-                    texts.Add(Label("carLabel", 595, 298, true)); texts.Add(Value("carValue", 595, 332, true, 32));
+                    texts.Add(Label("gridLabel", 595, 164, true)); texts.Add(Value("gridValue", 595, 194, true, 30));
+                    texts.Add(Label("batLabel", 595, 230, true)); texts.Add(Value("batValue", 595, 260, true, 30));
+                    texts.Add(Label("carLabel", 595, 296, true)); texts.Add(Value("carValue", 595, 326, true, 30));
                 }
                 else
                 {
@@ -136,7 +148,7 @@ internal static class EnergyLayouts
                 break;
         }
 
-        return new EnergyLayout([.. baseLayout.Arts, car], [.. baseLayout.Flows, flow], texts, baseLayout.Halos);
+        return new EnergyLayout([.. baseLayout.Arts, car], [.. flows, flow], texts, baseLayout.Halos);
     }
 
     private static EnergyLayout TopNoBat() => new(
