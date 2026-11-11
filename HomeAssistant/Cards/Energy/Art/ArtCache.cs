@@ -2,11 +2,11 @@ using SkiaSharp;
 
 namespace HomeAssistant;
 
-internal enum ArtKind { HouseModern, HouseClassic, Panels, Pylon, Battery }
+internal enum ArtKind { HouseModern, HouseClassic, Panels, Pylon, Battery, CarBlue, CarYellow, CarWhite }
 
 /// <summary>
 /// Les deux images d'un dessin à une échelle donnée. <see cref="Dark"/> : fenêtres et cellules éteintes ; <see cref="Lit"/> : allumées
-/// (lumières et halo cuits), à fondre sur <see cref="Dark"/>. Le pylône et la batterie n'ont rien d'allumé : leur <see cref="Lit"/> est transparent.
+/// (lumières et halo cuits), à fondre sur <see cref="Dark"/>. Le pylône, la batterie et la voiture n'ont rien d'allumé : leur <see cref="Lit"/> est transparent.
 /// <para>
 /// <see cref="Scale"/> est le nombre de pixels par unité des coordonnées locales de la maquette (celles du groupe SVG avant sa transformation).
 /// <see cref="Origin"/> est la position, en pixels de l'image, du point local (0, 0) : pour poser le dessin avec son coin local (lx, ly),
@@ -60,6 +60,9 @@ internal sealed class ArtCache : IDisposable
             case ArtKind.Panels: PanelsArt.Draw(p); break;
             case ArtKind.Pylon: PylonArt.Draw(p); break;
             case ArtKind.Battery: BatteryArt.Draw(p); break;
+            case ArtKind.CarBlue: CarArt.Draw(p, "#2a63d4"); break;
+            case ArtKind.CarYellow: CarArt.Draw(p, "#f0b90b"); break;
+            case ArtKind.CarWhite: CarArt.Draw(p, "#e9edf3"); break;
             default: throw new ArgumentOutOfRangeException(nameof(kind));
         }
     }

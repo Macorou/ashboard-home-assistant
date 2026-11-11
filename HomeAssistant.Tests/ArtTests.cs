@@ -14,6 +14,9 @@ public sealed class ArtTests
         { nameof(ArtKind.Panels), 200, 180 },
         { nameof(ArtKind.Pylon), 200, 180 },
         { nameof(ArtKind.Battery), 85, 145 },
+        { nameof(ArtKind.CarBlue), 110, 90 },
+        { nameof(ArtKind.CarYellow), 110, 90 },
+        { nameof(ArtKind.CarWhite), 110, 90 },
     };
 
     [Fact]
@@ -156,7 +159,55 @@ public sealed class ArtTests
             png.SaveTo(file);
         }
 
-        Assert.Equal(5, Directory.GetFiles(folder, "*.png").Length);
+        Assert.Equal(8, Directory.GetFiles(folder, "*.png").Length);
+    }
+
+    [Fact]
+    public void Car_ThreeColors_DifferOnlyByBody()
+    {
+        using var cache = new ArtCache();
+        var blue = Pixels(cache.Get(ArtKind.CarBlue, 2).Dark);
+        var yellow = Pixels(cache.Get(ArtKind.CarYellow, 2).Dark);
+        var white = Pixels(cache.Get(ArtKind.CarWhite, 2).Dark);
+
+        Assert.NotEqual(blue, yellow);
+        Assert.NotEqual(blue, white);
+        Assert.NotEqual(yellow, white);
+        // Même silhouette : seules les couleurs de la caisse changent, pas les dimensions.
+        var a = cache.Get(ArtKind.CarBlue, 2).Dark;
+        var b = cache.Get(ArtKind.CarWhite, 2).Dark;
+        Assert.Equal(a.Width, b.Width);
+        Assert.Equal(a.Height, b.Height);
+    }
+
+    [Theory]
+    [InlineData("Blue", nameof(ArtKind.CarBlue))]
+    [InlineData("Yellow", nameof(ArtKind.CarYellow))]
+    [InlineData("White", nameof(ArtKind.CarWhite))]
+    public void Car_KindFor_MapsEachColor(string color, string kind) =>
+        Assert.Equal(Enum.Parse<ArtKind>(kind), CarArt.KindFor(Enum.Parse<CarColor>(color)));
+
+    [Fact]
+    public void Car_HasNoLitImage()
+    {
+        using var cache = new ArtCache();
+        var art = cache.Get(ArtKind.CarBlue, 1);
+
+        Assert.True(InkBounds(art.Lit).IsEmpty);
+        Assert.False(InkBounds(art.Dark).IsEmpty);
+        Assert.Equal(art.Dark.Width, art.Lit.Width);
+        Assert.Equal(art.Dark.Height, art.Lit.Height);
+    }
+
+    [Fact]
+    public void Car_BadgeAnchor_IsAboveTheRoof()
+    {
+        using var cache = new ArtCache();
+        var art = cache.Get(ArtKind.CarBlue, 1);
+
+        var inkTop = InkBounds(art.Dark).Top - art.Origin.Y;
+
+        Assert.True(CarArt.BadgeAnchor.Y < inkTop + 4, $"ancre {CarArt.BadgeAnchor.Y}, haut de l'encre {inkTop}");
     }
 
     private static string RepositoryRoot()
