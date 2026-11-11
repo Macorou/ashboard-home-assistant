@@ -13,7 +13,11 @@ internal static class DailyReader
 
     private const string Euro = "€";
 
+    private const string Litres = "L";
+
     private static readonly string[] EnergyUnits = ["Wh", "kWh", "MWh"];
+
+    private static readonly string[] CubicMetres = ["m³", "m3"];
 
     /// <summary>Lit une valeur par réglage, dans l'ordre de <c>config.Values</c>.</summary>
     internal static IReadOnlyList<DailyItem> Read(DailyConfig config, IReadOnlyDictionary<string, HaState> states)
@@ -35,6 +39,8 @@ internal static class DailyReader
         DailyValue.Export => "Export",
         DailyValue.Cost => "Coût",
         DailyValue.Resale => "Revente",
+        DailyValue.Car => "Voiture",
+        DailyValue.Water => "Eau",
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, null),
     };
 
@@ -45,6 +51,14 @@ internal static class DailyReader
         return !string.IsNullOrEmpty(trimmed) && !EnergyUnits.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>Vrai pour une unité de volume non vide qui n'est ni <c>L</c>, ni <c>m³</c> (ou <c>m3</c>), casse ignorée.</summary>
+    internal static bool IsUnknownWaterUnit(string? unit)
+    {
+        var trimmed = unit?.Trim();
+        return !string.IsNullOrEmpty(trimmed) && !string.Equals(trimmed, Litres, StringComparison.OrdinalIgnoreCase)
+            && !CubicMetres.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static DailyItem ReadValue(DailyConfig config, DailyValue value, IReadOnlyDictionary<string, HaState> states) => value switch
     {
         DailyValue.Consumption => Energy(value, StateOf(config.Consumption, states)),
@@ -53,6 +67,8 @@ internal static class DailyReader
         DailyValue.Export => Energy(value, StateOf(config.Export, states)),
         DailyValue.Cost => Cost(StateOf(config.Cost, states)),
         DailyValue.Resale => Resale(config, states),
+        DailyValue.Car => Energy(value, StateOf(config.Car, states)),
+        DailyValue.Water => Water(StateOf(config.Water, states)),
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, null),
     };
 
@@ -69,6 +85,18 @@ internal static class DailyReader
     {
         var amount = EnergyReader.Number(state);
         return amount is null ? Absent(DailyValue.Cost) : new DailyItem(DailyValue.Cost, Format(amount.Value, "F2"), Currency(state!.Unit));
+    }
+
+    /// <summary>L'eau en litres entiers : les m³ sont convertis, une unité absente ou inconnue est lue comme des litres.</summary>
+    private static DailyItem Water(HaState? state)
+    {
+        var value = EnergyReader.Number(state);
+        if (value is null)
+        {
+            return Absent(DailyValue.Water);
+        }
+        var litres = CubicMetres.Contains(state!.Unit?.Trim(), StringComparer.OrdinalIgnoreCase) ? value.Value * 1000 : value.Value;
+        return new DailyItem(DailyValue.Water, Format(Math.Round(litres, MidpointRounding.AwayFromZero), "F0"), Litres);
     }
 
     /// <summary>Le gain : l'export en kWh multiplié par le prix, dans la devise du prix.</summary>

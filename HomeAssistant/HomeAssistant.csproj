@@ -28,6 +28,8 @@
   <ItemGroup>
     <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Les licences des éléments repris d'autres projets (icônes Tabler) voyagent avec le module. -->
+    <None Update="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

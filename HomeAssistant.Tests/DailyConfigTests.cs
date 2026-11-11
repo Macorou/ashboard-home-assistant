@@ -27,6 +27,43 @@ public sealed class DailyConfigTests
     }
 
     [Fact]
+    public void TryRead_Defaults_PutCarAndWaterLast()
+    {
+        var json = $$"""
+            {"day_water":{{Entity("sensor.eau")}},"day_car":{{Entity("sensor.voiture")}},"day_consumption":{{Entity("sensor.conso")}}}
+            """;
+
+        Assert.True(DailyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal(new[] { DailyValue.Consumption, DailyValue.Car, DailyValue.Water }, config!.Values.ToArray());
+        Assert.Equal(("sensor.voiture", "sensor.eau"), (config.Car, config.Water));
+    }
+
+    [Fact]
+    public void TryRead_CarAndWater_FollowTheChosenOrder_AndAreRead()
+    {
+        var json = $$"""
+            {"day_values":["water","cost","car"],"day_water":{{Entity("sensor.eau")}},"day_car":{{Entity("sensor.voiture")}},
+             "day_cost":{{Entity("sensor.cout")}}}
+            """;
+
+        Assert.True(DailyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal(new[] { DailyValue.Water, DailyValue.Cost, DailyValue.Car }, config!.Values.ToArray());
+        Assert.Equal(new[] { "sensor.eau", "sensor.cout", "sensor.voiture" }, config.EntityIds.ToArray());
+    }
+
+    [Fact]
+    public void TryRead_CarAndWaterWithoutSensor_AreDropped()
+    {
+        var json = $$"""{"day_values":["car","water","consumption"],"day_consumption":{{Entity("sensor.conso")}}}""";
+
+        Assert.True(DailyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal(new[] { DailyValue.Consumption }, config!.Values.ToArray());
+    }
+
+    [Fact]
     public void TryRead_FollowsTheChosenOrder()
     {
         var json = $$"""

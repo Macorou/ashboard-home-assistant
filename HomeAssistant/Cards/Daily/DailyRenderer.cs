@@ -5,7 +5,8 @@ namespace HomeAssistant;
 
 /// <summary>
 /// Dessine le Bilan du jour (spec § 6) dans l'espace de sa forme (464 × 100 ou 226 × 322), mis à l'échelle uniformément et centré dans
-/// <c>ctx.Bounds</c>, sur le fond transparent du module. Une case trop petite affiche son message, même sans données.
+/// <c>ctx.Bounds</c>, sur le fond transparent du module ; la liste s'allonge pour remplir toute la hauteur de la case. Une case trop petite
+/// affiche son message, même sans données.
 /// </summary>
 internal sealed class DailyRenderer(DailyConfig config) : IDisposable
 {
@@ -52,6 +53,8 @@ internal sealed class DailyRenderer(DailyConfig config) : IDisposable
         var width = strip ? DailyLayout.StripWidth : DailyLayout.ListWidth;
         var height = strip ? DailyLayout.StripHeight : DailyLayout.ListHeight;
         var scale = Math.Min(bounds.Width / width, bounds.Height / height);
+        // La liste garde sa largeur et sa taille de texte, mais ses lignes s'étalent sur toute la hauteur de la case.
+        if (!strip) height = bounds.Height / scale;
         var originX = bounds.Left + (bounds.Width - width * scale) / 2;
         var originY = bounds.Top + (bounds.Height - height * scale) / 2;
         var fade = state.Stale ? StaleOpacity : 1f;
@@ -60,7 +63,7 @@ internal sealed class DailyRenderer(DailyConfig config) : IDisposable
         canvas.Save();
         canvas.ClipRect(bounds);
         if (strip) DrawStrip(canvas, ctx, state.Items, scale, originX, originY, fade);
-        else DrawList(canvas, ctx, state.Items, scale, originX, originY, fade);
+        else DrawList(canvas, ctx, state.Items, scale, originX, originY, height, fade);
         canvas.Restore();
     }
 
@@ -106,10 +109,11 @@ internal sealed class DailyRenderer(DailyConfig config) : IDisposable
 
     // ----- Liste -----
 
-    private void DrawList(SKCanvas canvas, ModuleRenderContext ctx, IReadOnlyList<DailyItem> items, float s, float ox, float oy, float fade)
+    private void DrawList(SKCanvas canvas, ModuleRenderContext ctx, IReadOnlyList<DailyItem> items, float s, float ox, float oy, float height,
+        float fade)
     {
         var count = items.Count;
-        var rowHeight = (DailyLayout.ListHeight - 2 * ListPadY) / count;
+        var rowHeight = (height - 2 * ListPadY) / count;
         var left = ListPadX;
         var right = DailyLayout.ListWidth - ListPadX;
         var labelX = ox + (left + ListIcon + ListIconGap) * s;

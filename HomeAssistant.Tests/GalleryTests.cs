@@ -133,7 +133,7 @@ public sealed class GalleryTests
         File.WriteAllBytes(file, data.ToArray());
     }
 
-    /// <summary>Les valeurs de la maquette, six affichées : conso, prod., import, export, coût, revente (0,13 €/kWh).</summary>
+    /// <summary>Les valeurs de la maquette, huit affichées : conso, prod., import, export, coût, revente (0,13 €/kWh), voiture et eau.</summary>
     private static async Task<List<string>> WriteDailyAsync(string directory, string shape, IEnumerable<(int Columns, int Rows)> sizes)
     {
         var ha = new FakeHomeAssistant();
@@ -144,14 +144,17 @@ public sealed class GalleryTests
         Sensor("sensor.imp", "18.6", "kWh");
         Sensor("sensor.exp", "1.6", "kWh");
         Sensor("sensor.cout", "2.91", "EUR");
+        Sensor("sensor.voiture", "9.4", "kWh");
+        Sensor("sensor.eau", "182", "L");
 
         TestableModule.Handler.Value = ha;
         var probe = new TestableModule.Holder();
         TestableModule.Probe.Value = probe;
         var settings = $$"""
-            {"display":"daily","day_shape":"{{shape}}","day_values":["consumption","production","import","export","cost","resale"],
+            {"display":"daily","day_shape":"{{shape}}","day_values":["consumption","production","import","export","cost","resale","car","water"],
              "day_consumption":{"id":"sensor.conso"},"day_production":{"id":"sensor.prod"},"day_import":{"id":"sensor.imp"},
-             "day_export":{"id":"sensor.exp"},"day_cost":{"id":"sensor.cout"},"day_price_mode":"typed","day_price":"0,13"}
+             "day_export":{"id":"sensor.exp"},"day_cost":{"id":"sensor.cout"},"day_price_mode":"typed","day_price":"0,13",
+             "day_car":{"id":"sensor.voiture"},"day_water":{"id":"sensor.eau"} }
             """;
         await using var host = new ModuleTestHost<TestableModule>(ManifestPath, JsonDocument.Parse(settings).RootElement);
         host.Secrets.Set("ha_url", "192.168.1.10:8123");
@@ -202,10 +205,10 @@ public sealed class GalleryTests
         }
 
         written.AddRange(await WriteDailyAsync(directory, "strip", [(4, 1), (6, 1), (4, 2)]));
-        written.AddRange(await WriteDailyAsync(directory, "list", [(2, 3), (3, 4)]));
+        written.AddRange(await WriteDailyAsync(directory, "list", [(2, 3), (2, 4), (3, 4)]));
 
-        // 3 dispositions x 2 maisons x 2 (batterie) x (9 soleil + 2 scénarios), puis 5 tailles du Bilan du jour x 3 thèmes.
-        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + 5 * 3, written.Count);
+        // 3 dispositions x 2 maisons x 2 (batterie) x (9 soleil + 2 scénarios), puis 6 tailles du Bilan du jour x 3 thèmes.
+        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + 6 * 3, written.Count);
         Assert.All(written, file => Assert.True(new FileInfo(file).Length > 2000, file));
         foreach (var theme in Themes)
         {

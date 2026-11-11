@@ -13,22 +13,22 @@ public sealed class DailyRendererTests
 
     private static string SettingsFor(string shape, int values)
     {
-        var keys = new[] { "consumption", "production", "import", "export", "cost", "resale" }.Take(values);
+        var keys = new[] { "consumption", "production", "import", "export", "cost", "resale", "car", "water" }.Take(values);
         return $$"""
             {"display":"daily","day_shape":"{{shape}}","day_values":[{{string.Join(",", keys.Select(k => $"\"{k}\""))}}],
              "day_consumption":{"id":"sensor.a"},"day_production":{"id":"sensor.b"},"day_import":{"id":"sensor.c"},
-             "day_export":{"id":"sensor.d"},"day_cost":{"id":"sensor.e"},"day_price_mode":"typed","day_price":"0,2"}
+             "day_export":{"id":"sensor.d"},"day_cost":{"id":"sensor.e"},"day_price_mode":"typed","day_price":"0,2",
+             "day_car":{"id":"sensor.f"},"day_water":{"id":"sensor.g"} }
             """;
     }
 
     private static FakeHomeAssistant Sensors(string value)
     {
         var ha = new FakeHomeAssistant();
-        foreach (var id in new[] { "a", "b", "c", "d" })
+        foreach (var (id, unit) in new[] { ("a", "kWh"), ("b", "kWh"), ("c", "kWh"), ("d", "kWh"), ("e", "EUR"), ("f", "kWh"), ("g", "L") })
         {
-            ha.Responses["/api/states/sensor." + id] = (200, JsonSerializer.Serialize(new { entity_id = "sensor." + id, state = value, attributes = new { unit_of_measurement = "kWh" } }));
+            ha.Responses["/api/states/sensor." + id] = (200, JsonSerializer.Serialize(new { entity_id = "sensor." + id, state = value, attributes = new { unit_of_measurement = unit } }));
         }
-        ha.Responses["/api/states/sensor.e"] = (200, JsonSerializer.Serialize(new { entity_id = "sensor.e", state = value, attributes = new { unit_of_measurement = "EUR" } }));
         return ha;
     }
 
@@ -96,6 +96,41 @@ public sealed class DailyRendererTests
         }
     }
 
+    [Theory]
+    [InlineData("classique")]
+    [InlineData("liquid-glass")]
+    [InlineData("pixel")]
+    public async Task Render_List_SpreadsEightValuesOverTheWholeHeight(string theme)
+    {
+        var (host, probe) = await StartAsync(Sensors("12.3"), SettingsFor("list", 8));
+        await using var _ = host;
+        await WaitUntilAsync(() => ((DailyCard)probe.Module!.Card!).Current is not null);
+
+        using var bitmap = host.Render(new GridSize(2, 4), theme);
+        Assert.Equal(8, ((DailyCard)probe.Module!.Card!).Current!.Items.Count);
+
+        // Sans étirement, la forme 226 × 322 est centrée et laisse une bande vide en haut et en bas d'une case 2 × 4.
+        var band = bitmap.Height / 10;
+        Assert.True(InkIn(bitmap, 0, bitmap.Width, 0, band) > 0, $"{theme} : rien dans le haut de la case");
+        Assert.True(InkIn(bitmap, 0, bitmap.Width, bitmap.Height - band, bitmap.Height) > 0, $"{theme} : rien dans le bas de la case");
+    }
+
+    [Theory]
+    [InlineData("classique")]
+    [InlineData("liquid-glass")]
+    [InlineData("pixel")]
+    public async Task Render_Strip_EightValues_StayInsideTheCase(string theme)
+    {
+        var (host, probe) = await StartAsync(Sensors("123.4"), SettingsFor("strip", 8));
+        await using var _ = host;
+        await WaitUntilAsync(() => ((DailyCard)probe.Module!.Card!).Current is not null);
+
+        using var bitmap = host.Render(new GridSize(4, 1), theme);
+        Assert.True(Ink(bitmap, 0, bitmap.Width) > 100);
+        Assert.Equal(0, Ink(bitmap, 0, 2));
+        Assert.Equal(0, Ink(bitmap, bitmap.Width - 2, bitmap.Width));
+    }
+
     [Fact]
     public async Task Render_TooSmall_DrawsTheMessage_EvenWithoutData()
     {
@@ -158,9 +193,11 @@ public sealed class DailyRendererTests
         await WaitUntilAsync(() => ((DailyCard)probe.Module!.Card!).Current is not null);
 
         using var bitmap = host.Render(new GridSize(2, 3), theme);
+        // La liste garde l'échelle de sa forme (226 × 322), centrée en largeur, mais s'étale sur toute la hauteur de la case.
         var scale = Math.Min(bitmap.Width / 226f, bitmap.Height / 322f);
         var ox = (bitmap.Width - 226 * scale) / 2;
-        var oy = (bitmap.Height - 322 * scale) / 2;
+        var oy = 0f;
+        var height = bitmap.Height / scale;
         Assert.True(Ink(bitmap, 0, bitmap.Width) > 100);
         Assert.Equal(0, Ink(bitmap, 0, (int)(ox + 13 * scale)));
         Assert.Equal(0, Ink(bitmap, (int)Math.Ceiling(ox + 213 * scale), bitmap.Width));
@@ -172,7 +209,7 @@ public sealed class DailyRendererTests
         await WaitUntilAsync(() => ((DailyCard)smallProbe.Module!.Card!).Current is not null);
         using var small = smallHost.Render(new GridSize(2, 3), theme);
 
-        var rowHeight = (322 - 12) / 6f;
+        var rowHeight = (height - 12) / 6f;
         for (var row = 0; row < 6; row++)
         {
             var top = (int)(oy + (6 + rowHeight * row) * scale) + 3;

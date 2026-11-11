@@ -4,7 +4,7 @@
   <img src="docs/images/carte-soleil.png" alt="La carte Flux d'énergie en plein soleil : les panneaux alimentent la maison et la batterie, et le surplus part vers le réseau." width="700">
 </p>
 
-Un module pour **Ashboard Vision**, le logiciel de l'écran Thermalright Trofeo Vision. Il lit ton installation dans **Home Assistant** et affiche ce qui se passe dans ton installation solaire : la production des panneaux, ta consommation, ce que tu achètes ou vends au réseau, et ta batterie si tu en as une. Les flux de courant sont dessinés et animés entre les panneaux, la maison et le réseau. Il affiche aussi un **bilan du jour** : ta consommation, ta production, ce que tu achètes et vends, ce que ça coûte, et le gain de la revente.
+Un module pour **Ashboard Vision**, le logiciel de l'écran Thermalright Trofeo Vision. Il lit ton installation dans **Home Assistant** et affiche ce qui se passe dans ton installation solaire : la production des panneaux, ta consommation, ce que tu achètes ou vends au réseau, et ta batterie si tu en as une. Les flux de courant sont dessinés et animés entre les panneaux, la maison et le réseau. Il affiche aussi un **bilan du jour** : ta consommation, ta production, ce que tu achètes et vends, ce que ça coûte, le gain de la revente, la recharge de ta voiture et ton eau.
 
 Le module **ne fait que lire** Home Assistant. Il n'envoie aucune commande et n'écrit rien dans ta configuration.
 
@@ -114,18 +114,19 @@ La carte **Bilan du jour** montre les totaux de la journée, en petit. Choisis-l
 ### Forme et tailles
 
 - **Bande, une ligne** (par défaut) : une colonne par valeur, avec l'icône, le nombre et le nom. Elle demande au moins 4 × 1.
-- **Liste, en hauteur** : une ligne par valeur, avec l'icône, le nom, et le nombre à droite. Elle demande au moins 2 × 3.
+- **Liste, en hauteur** : une ligne par valeur, avec l'icône, le nom, et le nombre à droite. Elle demande au moins 2 × 3. Dans une case plus haute, les lignes s'étalent sur toute la hauteur : une case de 2 × 4 tient les huit valeurs à l'aise.
 
 Si la case est plus petite que la forme choisie, elle affiche un court message qui te dit la taille minimale.
 
 ### Valeurs et ordre
 
-Le réglage « Valeurs à afficher et ordre » te laisse cocher les valeurs à voir, et les ranger dans l'ordre qui te plaît. Les six sont cochées par défaut, dans cet ordre :
+Le réglage « Valeurs à afficher et ordre » te laisse cocher les valeurs à voir, et les ranger dans l'ordre qui te plaît. Les huit sont cochées par défaut, dans cet ordre :
 
 - **Consommation** et **production** ;
 - **Import** (ce que tu achètes au réseau) et **export** (ce que tu vends) ;
 - **Coût** ;
-- **Gain de revente**.
+- **Gain de revente** ;
+- **Voiture** (l'énergie donnée à ta voiture) et **eau**.
 
 Une valeur non cochée n'apparaît pas. Si aucune valeur cochée n'a de capteur, la case reste « non configurée » et te demande d'en choisir un.
 
@@ -134,9 +135,11 @@ Une valeur non cochée n'apparaît pas. Si aucune valeur cochée n'a de capteur,
 Chaque valeur a son capteur, à choisir dans la liste :
 
 - les capteurs de consommation, de production, d'import et d'export **du jour** : des capteurs d'énergie, en Wh, kWh ou MWh (convertis en kWh) ;
+- le capteur de recharge de la voiture **du jour** : un capteur d'énergie, comme les précédents ;
+- le capteur d'eau **du jour** : en litres ou en m³. L'eau s'affiche toujours en litres entiers, par exemple « 182 L » ; les m³ sont convertis ;
 - le capteur de coût **du jour** : un capteur monétaire, en € ou EUR.
 
-Un capteur d'énergie sans unité est lu comme des kWh. Dans la liste, les capteurs dont le nom ou l'identifiant contient « jour », « today » ou « daily » passent en premier, et chaque proposition affiche sa valeur actuelle : vérifie-la avant de valider.
+Un capteur d'énergie sans unité est lu comme des kWh, un capteur d'eau sans unité comme des litres. Dans la liste, les capteurs dont le nom ou l'identifiant contient « jour », « today » ou « daily » passent en premier, et chaque proposition affiche sa valeur actuelle : vérifie-la avant de valider.
 
 Ces capteurs doivent donner des **totaux du jour**, qui repartent de zéro tout seuls chaque jour. C'est Home Assistant qui les remet à zéro, pas le module. Un compteur qui ne s'arrête jamais ne convient pas.
 
@@ -204,3 +207,5 @@ L'identifiant du module (`id` du manifeste) est définitif après la première p
 ## Licence
 
 Ce module est distribué sous licence **GPL-3.0-or-later**. Le texte complet est dans le fichier [LICENSE](LICENSE).
+
+Les icônes de la voiture et de la goutte d'eau viennent de [Tabler Icons](https://tabler.io/icons), sous licence MIT (Copyright (c) 2020-2024 Paweł Kuna). Leur licence est dans [HomeAssistant/THIRD-PARTY-NOTICES.txt](HomeAssistant/THIRD-PARTY-NOTICES.txt), et ce fichier est livré avec le module.

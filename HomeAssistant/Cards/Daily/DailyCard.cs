@@ -49,15 +49,21 @@ internal sealed class DailyCard(CardContext context, DailyConfig config) : Polli
         }
     }
 
-    /// <summary>Seuls les quatre capteurs d'énergie sont concernés : le coût et le prix ont leurs propres unités.</summary>
+    /// <summary>Les cinq capteurs d'énergie et celui de l'eau sont concernés : le coût et le prix ont leurs propres unités.</summary>
     private void WarnUnknownUnits(IReadOnlyDictionary<string, HaState> states)
     {
-        foreach (var id in new[] { config.Consumption, config.Production, config.Import, config.Export })
+        foreach (var id in new[] { config.Consumption, config.Production, config.Import, config.Export, config.Car })
         {
-            if (id.Length > 0 && states.TryGetValue(id, out var state) && DailyReader.IsUnknownEnergyUnit(state.Unit) && _warnedUnits.Add(id))
-            {
-                Context.Services.Log.Warning($"Unité « {state.Unit} » inconnue pour {id} : elle est traitée comme des kWh.");
-            }
+            Warn(states, id, DailyReader.IsUnknownEnergyUnit, "kWh");
+        }
+        Warn(states, config.Water, DailyReader.IsUnknownWaterUnit, "litres");
+    }
+
+    private void Warn(IReadOnlyDictionary<string, HaState> states, string id, Func<string?, bool> isUnknown, string readAs)
+    {
+        if (id.Length > 0 && states.TryGetValue(id, out var state) && isUnknown(state.Unit) && _warnedUnits.Add(id))
+        {
+            Context.Services.Log.Warning($"Unité « {state.Unit} » inconnue pour {id} : elle est traitée comme des {readAs}.");
         }
     }
 

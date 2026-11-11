@@ -5,7 +5,8 @@ public sealed class DailyReaderTests
     private static HaState S(string id, string state, string? unit = null) => new(id, state, unit, null, null);
 
     private static DailyConfig Config(DailyValue value, ResalePrice mode = ResalePrice.None, double? typed = null, string priceSensor = "") =>
-        new(DailyShape.Strip, [value], "sensor.conso", "sensor.prod", "sensor.imp", "sensor.exp", "sensor.cout", mode, typed, priceSensor);
+        new(DailyShape.Strip, [value], "sensor.conso", "sensor.prod", "sensor.imp", "sensor.exp", "sensor.cout", mode, typed, priceSensor,
+            "sensor.voiture", "sensor.eau");
 
     private static DailyItem ReadOne(DailyConfig config, params HaState[] states) =>
         DailyReader.Read(config, states.ToDictionary(s => s.EntityId)).Single();
@@ -203,6 +204,52 @@ public sealed class DailyReaderTests
     }
 
     [Theory]
+    [InlineData("12.34", "kWh")]
+    [InlineData("12340", "Wh")]
+    [InlineData("12.34", null)]
+    public void Car_IsKwhOneDecimal(string state, string? unit)
+    {
+        var item = ReadOne(Config(DailyValue.Car), S("sensor.voiture", state, unit));
+
+        Assert.Equal((DailyValue.Car, "12,3", "kWh"), (item.Value, item.Number, item.Unit));
+    }
+
+    [Theory]
+    [InlineData("182.6", "L")]
+    [InlineData("182.6", "l")]
+    [InlineData("0.1826", "m³")]
+    [InlineData("0.1826", "m3")]
+    [InlineData("182.6", null)]
+    [InlineData("182.6", "gal")]
+    public void Water_IsWholeLitres(string state, string? unit)
+    {
+        var item = ReadOne(Config(DailyValue.Water), S("sensor.eau", state, unit));
+
+        Assert.Equal((DailyValue.Water, "183", "L"), (item.Value, item.Number, item.Unit));
+    }
+
+    [Fact]
+    public void Water_Unavailable_IsMissing()
+    {
+        var item = ReadOne(Config(DailyValue.Water), S("sensor.eau", "unavailable", "L"));
+
+        Assert.Equal(("—", ""), (item.Number, item.Unit));
+    }
+
+    [Theory]
+    [InlineData("L", false)]
+    [InlineData("l", false)]
+    [InlineData("m³", false)]
+    [InlineData("M3", false)]
+    [InlineData(null, false)]
+    [InlineData("gal", true)]
+    [InlineData("kWh", true)]
+    public void IsUnknownWaterUnit_IgnoresCase(string? unit, bool expected) =>
+        Assert.Equal(expected, DailyReader.IsUnknownWaterUnit(unit));
+
+    [Theory]
+    [InlineData("Car", "Voiture")]
+    [InlineData("Water", "Eau")]
     [InlineData("Consumption", "Conso")]
     [InlineData("Production", "Prod.")]
     [InlineData("Import", "Import")]

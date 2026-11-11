@@ -3,7 +3,7 @@
   "name": "Home Assistant",
   "description": "Affiche ton installation solaire depuis Home Assistant : flux de courant animés et bilan du jour. Module non affilié au projet Home Assistant.",
   "author": "Macorou",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "sdk": "1.0",
   "entry": "HomeAssistant.dll",
   "permissions": [ "reseau-local", "internet" ],
@@ -45,9 +45,11 @@
         { "value": "import", "label": "Import" },
         { "value": "export", "label": "Export" },
         { "value": "cost", "label": "Coût" },
-        { "value": "resale", "label": "Gain de revente" }
+        { "value": "resale", "label": "Gain de revente" },
+        { "value": "car", "label": "Voiture" },
+        { "value": "water", "label": "Eau" }
       ],
-      "default": [ "consumption", "production", "import", "export", "cost", "resale" ],
+      "default": [ "consumption", "production", "import", "export", "cost", "resale", "car", "water" ],
       "visibleWhen": { "key": "display", "value": "daily" }
     },
     {
@@ -68,6 +70,18 @@
     {
       "kind": "lookup", "key": "day_export", "label": "Capteur d'export du jour", "labelPath": "name",
       "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_car", "label": "Capteur de recharge de la voiture du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "help": "L'énergie donnée à la voiture depuis minuit, en kWh.",
+      "visibleWhen": { "key": "display", "value": "daily" }
+    },
+    {
+      "kind": "lookup", "key": "day_water", "label": "Capteur d'eau du jour", "labelPath": "name",
+      "placeholder": "Tape un nom de capteur", "emptyLabel": "Aucun capteur choisi",
+      "help": "L'eau consommée depuis minuit, en litres ou en m³. Elle s'affiche en litres.",
       "visibleWhen": { "key": "display", "value": "daily" }
     },
     {

@@ -67,7 +67,7 @@ public sealed class ModuleStartupTests
         var fields = ManifestFields(manifest);
 
         var daily = fields.Where(f => f.GetProperty("key").GetString()!.StartsWith("day_", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(10, daily.Length);
+        Assert.Equal(12, daily.Length);
         foreach (var field in daily)
         {
             var key = field.GetProperty("key").GetString();
@@ -93,8 +93,9 @@ public sealed class ModuleStartupTests
 
         var start = keys.IndexOf("display") + 1;
         Assert.Equal(
-            ["day_shape", "day_values", "day_consumption", "day_production", "day_import", "day_export", "day_cost", "day_price_mode", "day_price", "day_price_sensor"],
-            keys.GetRange(start, 10));
+            ["day_shape", "day_values", "day_consumption", "day_production", "day_import", "day_export", "day_car", "day_water", "day_cost",
+             "day_price_mode", "day_price", "day_price_sensor"],
+            keys.GetRange(start, 12));
     }
 
     [Fact]
@@ -108,13 +109,13 @@ public sealed class ModuleStartupTests
     }
 
     [Fact]
-    public void Manifest_DayValues_IsAnOrderedListOfSix()
+    public void Manifest_DayValues_IsAnOrderedListOfEight()
     {
         using var manifest = JsonDocument.Parse(File.ReadAllText(ManifestPath));
         var field = Field(ManifestFields(manifest), "day_values");
 
         Assert.Equal("list", field.GetProperty("kind").GetString());
-        var expected = new[] { "consumption", "production", "import", "export", "cost", "resale" };
+        var expected = new[] { "consumption", "production", "import", "export", "cost", "resale", "car", "water" };
         Assert.Equal(expected, field.GetProperty("default").EnumerateArray().Select(v => v.GetString()!).ToArray());
         Assert.Equal(expected, field.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("value").GetString()!).ToArray());
     }

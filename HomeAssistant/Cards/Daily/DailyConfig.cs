@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace HomeAssistant;
 
-internal enum DailyValue { Consumption, Production, Import, Export, Cost, Resale }
+internal enum DailyValue { Consumption, Production, Import, Export, Cost, Resale, Car, Water }
 
 internal enum DailyShape { Strip, List }
 
@@ -16,9 +16,9 @@ internal enum ResalePrice { None, Typed, Sensor }
 /// ou nuls, comme dans <see cref="EnergyConfig"/>.
 /// </summary>
 internal sealed record DailyConfig(DailyShape Shape, IReadOnlyList<DailyValue> Values, string Consumption, string Production,
-    string Import, string Export, string Cost, ResalePrice PriceMode, double? TypedPrice, string PriceSensor)
+    string Import, string Export, string Cost, ResalePrice PriceMode, double? TypedPrice, string PriceSensor, string Car = "", string Water = "")
 {
-    private static readonly string[] ValueKeys = ["consumption", "production", "import", "export", "cost", "resale"];
+    private static readonly string[] ValueKeys = ["consumption", "production", "import", "export", "cost", "resale", "car", "water"];
 
     private static readonly Regex PricePattern = new(@"^[0-9]+([.,][0-9]+)?\z", RegexOptions.CultureInvariant);
 
@@ -37,6 +37,8 @@ internal sealed record DailyConfig(DailyShape Shape, IReadOnlyList<DailyValue> V
         var import = SettingsReader.EntityId(settings, "day_import");
         var export = SettingsReader.EntityId(settings, "day_export");
         var cost = SettingsReader.EntityId(settings, "day_cost");
+        var car = SettingsReader.EntityId(settings, "day_car");
+        var water = SettingsReader.EntityId(settings, "day_water");
 
         var priceMode = SettingsReader.Choice(settings, "day_price_mode", "none", "none", "typed", "sensor") switch
         {
@@ -68,6 +70,8 @@ internal sealed record DailyConfig(DailyShape Shape, IReadOnlyList<DailyValue> V
                 "export" when export.Length > 0 => DailyValue.Export,
                 "cost" when cost.Length > 0 => DailyValue.Cost,
                 "resale" when resaleReady => DailyValue.Resale,
+                "car" when car.Length > 0 => DailyValue.Car,
+                "water" when water.Length > 0 => DailyValue.Water,
                 _ => null,
             };
             if (shown is { } value)
@@ -82,7 +86,7 @@ internal sealed record DailyConfig(DailyShape Shape, IReadOnlyList<DailyValue> V
             return false;
         }
 
-        config = new DailyConfig(shape, values, consumption, production, import, export, cost, priceMode, typedPrice, priceSensor);
+        config = new DailyConfig(shape, values, consumption, production, import, export, cost, priceMode, typedPrice, priceSensor, car, water);
         return true;
     }
 
@@ -115,6 +119,8 @@ internal sealed record DailyConfig(DailyShape Shape, IReadOnlyList<DailyValue> V
         DailyValue.Production => Production,
         DailyValue.Import => Import,
         DailyValue.Export or DailyValue.Resale => Export,
+        DailyValue.Car => Car,
+        DailyValue.Water => Water,
         _ => Cost,
     };
 }

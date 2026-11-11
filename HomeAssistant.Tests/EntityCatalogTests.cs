@@ -170,6 +170,22 @@ public sealed class EntityCatalogTests
     }
 
     [Fact]
+    public void Search_Water_KeepsVolumes_AndRanksDailyFirst()
+    {
+        var states = new[]
+        {
+            S("sensor.a_total", "1", "m³", "Compteur d'eau"),
+            S("sensor.b", "1", "L", "Eau du jour"),
+            S("sensor.c", "1", "M3", "Citerne"),
+            S("sensor.d", "1", null, "Débit", "water"),
+            S("sensor.e", "1", "kWh", "Énergie"),
+            S("sensor.f", "1", "L/min", "Débit douche"),
+        };
+
+        Assert.Equal(["sensor.b", "sensor.c", "sensor.a_total", "sensor.d"], Ids(EntityCatalog.Search(states, EntityKind.Water, "")));
+    }
+
+    [Fact]
     public void Search_Energy_RanksDailyFirst()
     {
         var states = new[]
@@ -217,6 +233,8 @@ public sealed class EntityCatalogTests
     [InlineData("day_production", "Energy")]
     [InlineData("day_import", "Energy")]
     [InlineData("day_export", "Energy")]
+    [InlineData("day_car", "Energy")]
+    [InlineData("day_water", "Water")]
     [InlineData("day_cost", "Money")]
     [InlineData("day_price_sensor", "Price")]
     public void KindFor_MapsFields(string key, string kind) =>
