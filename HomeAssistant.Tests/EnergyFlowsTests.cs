@@ -128,4 +128,20 @@ public sealed class EnergyFlowsTests
         Assert.True(flows.SolarToGrid + flows.BatteryToGrid <= e);
         Assert.True(flows.SolarToHome + flows.BatteryToHome + flows.GridToHome <= flows.Home);
     }
+
+    [Fact]
+    public void HomeToCar_OnlyWhenCharging()
+    {
+        Assert.Equal(7400, EnergyFlows.Compute(new EnergyInput(3000, 0, 0, 0, 0, null, Car: 7400)).HomeToCar);
+        Assert.Equal(0, EnergyFlows.Compute(new EnergyInput(3000, 0, 0, 0, 0, null, Car: 40)).HomeToCar);
+    }
+
+    [Fact]
+    public void Car_DoesNotChangeHome()
+    {
+        var without = EnergyFlows.Compute(new EnergyInput(3000, 5000, 0, 0, 0, null, Car: 0));
+        var with = EnergyFlows.Compute(new EnergyInput(3000, 5000, 0, 0, 0, null, Car: 7400));
+
+        Assert.Equal(without.Home, with.Home);
+    }
 }

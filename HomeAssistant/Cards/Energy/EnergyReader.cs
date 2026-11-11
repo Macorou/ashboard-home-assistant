@@ -3,7 +3,8 @@ using System.Globalization;
 namespace HomeAssistant;
 
 /// <summary>Ce qu'on retient d'une lecture de tous les capteurs : les entrées du calcul et ce qui manque.</summary>
-internal sealed record EnergySnapshot(EnergyInput Input, double? BatterySocPercent, bool BatteryPowerKnown, string? UnavailableGridEntity);
+internal sealed record EnergySnapshot(EnergyInput Input, double? BatterySocPercent, bool BatteryPowerKnown, string? UnavailableGridEntity,
+    CarReading? Car = null);
 
 /// <summary>Transforme les états Home Assistant en entrées du calcul des flux (spec § 6).</summary>
 internal static class EnergyReader
@@ -22,6 +23,15 @@ internal static class EnergyReader
     /// <summary>Le niveau en %, borné à 0..100 ; null si l'état n'est pas un nombre fini.</summary>
     internal static double? Percent(HaState? state) =>
         TryNumber(state, out var value) ? Math.Clamp(value, 0, 100) : null;
+
+    /// <summary>L'état d'un capteur tout ou rien : <c>on</c> vrai, <c>off</c> faux (casse ignorée), sinon null.</summary>
+    internal static bool? OnOff(HaState? state)
+    {
+        var text = state?.State.Trim();
+        return string.Equals(text, "on", StringComparison.OrdinalIgnoreCase) ? true
+            : string.Equals(text, "off", StringComparison.OrdinalIgnoreCase) ? false
+            : null;
+    }
 
     internal static EnergySnapshot Combine(EnergyConfig config, IReadOnlyDictionary<string, HaState> states)
     {
@@ -73,7 +83,18 @@ internal static class EnergyReader
         if (config.Battery != BatteryMode.None && config.BatterySoc.Length > 0 && states.TryGetValue(config.BatterySoc, out var socState))
             soc = Percent(socState);
 
-        return new EnergySnapshot(new EnergyInput(solar, import, export, charge, discharge, Read(config.Home)), soc, batteryKnown, unavailableGrid);
+        CarReading? car = null;
+        var carWatts = 0.0;
+        if (config.HasCar)
+        {
+            var watts = Read(config.CarPower) is { } raw ? Math.Max(0, raw) : (double?)null;
+            var plugged = config.CarPlug.Length > 0 && states.TryGetValue(config.CarPlug, out var plugState) ? OnOff(plugState) : null;
+            var carSoc = config.CarSoc.Length > 0 && states.TryGetValue(config.CarSoc, out var carSocState) ? Percent(carSocState) : null;
+            car = new CarReading(watts, plugged, carSoc, CarState.AspectOf(watts, plugged));
+            carWatts = watts ?? 0;
+        }
+
+        return new EnergySnapshot(new EnergyInput(solar, import, export, charge, discharge, Read(config.Home), carWatts), soc, batteryKnown, unavailableGrid, car);
     }
 
     private static bool TryNumber(HaState? state, out double value)

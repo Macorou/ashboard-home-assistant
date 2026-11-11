@@ -193,4 +193,73 @@ public sealed class EnergyReaderTests
         Assert.Null(EnergyReader.Percent(S("sensor.soc", "NaN", "%")));
         Assert.Null(EnergyReader.Percent(null));
     }
+
+    private static EnergyConfig CarConfig() =>
+        Config() with { HasCar = true, CarPower = "sensor.car_power", CarPlug = "binary_sensor.car_plug", CarSoc = "sensor.car_soc" };
+
+    [Theory]
+    [InlineData(7400.0, null, nameof(CarAspect.Charging))] // la puissance fait foi, même sans capteur branché
+    [InlineData(7400.0, false, nameof(CarAspect.Charging))]
+    [InlineData(49.0, true, nameof(CarAspect.Waiting))]
+    [InlineData(0.0, null, nameof(CarAspect.Unplugged))]
+    [InlineData(null, true, nameof(CarAspect.Waiting))]
+    [InlineData(null, null, nameof(CarAspect.Unplugged))]
+    public void AspectOf(double? watts, bool? plugged, string expected) =>
+        Assert.Equal(expected, CarState.AspectOf(watts, plugged).ToString());
+
+    [Fact]
+    public void Car_Kilowatts_AreConverted()
+    {
+        var snapshot = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_power", "7.4", "kW")));
+
+        Assert.Equal(7400, snapshot.Car!.Watts);
+        Assert.Equal(CarAspect.Charging, snapshot.Car.Aspect);
+        Assert.Equal(7400, snapshot.Input.Car);
+    }
+
+    [Fact]
+    public void Car_PowerUnavailable_PlugOn()
+    {
+        var snapshot = EnergyReader.Combine(CarConfig(),
+            States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_power", "unavailable"), S("binary_sensor.car_plug", "on", null)));
+
+        Assert.Null(snapshot.Car!.Watts);
+        Assert.True(snapshot.Car.Plugged);
+        Assert.Equal(CarAspect.Waiting, snapshot.Car.Aspect);
+        Assert.Equal(0, snapshot.Input.Car);
+    }
+
+    [Fact]
+    public void Car_NegativePower_IsClampedToZero()
+    {
+        var snapshot = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_power", "-30")));
+
+        Assert.Equal(0, snapshot.Car!.Watts);
+        Assert.Equal(0, snapshot.Input.Car);
+    }
+
+    [Fact]
+    public void Car_SocClamped_AndUnavailableIsNull()
+    {
+        var high = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_soc", "104", "%")));
+        var unknown = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_soc", "unknown", "%")));
+
+        Assert.Equal(100, high.Car!.SocPercent);
+        Assert.Null(unknown.Car!.SocPercent);
+    }
+
+    [Theory]
+    [InlineData("on", true)]
+    [InlineData("OFF", false)]
+    [InlineData("unavailable", null)]
+    public void OnOff(string text, bool? expected) => Assert.Equal(expected, EnergyReader.OnOff(S("binary_sensor.x", text, null)));
+
+    [Fact]
+    public void NoCar_SnapshotCarIsNull()
+    {
+        var snapshot = EnergyReader.Combine(Config(), States(S("sensor.pv", "0"), S("sensor.grid", "0")));
+
+        Assert.Null(snapshot.Car);
+        Assert.Equal(0, snapshot.Input.Car);
+    }
 }

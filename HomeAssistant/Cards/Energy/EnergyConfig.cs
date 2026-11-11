@@ -14,7 +14,8 @@ internal enum BatteryMode { None, One, Two }
 /// </summary>
 internal sealed record EnergyConfig(LayoutKind Layout, HouseStyle House, string Solar, bool GridTwo, string Grid, bool GridInverted,
     string GridImport, string GridExport, string Home, BatteryMode Battery, string BatteryPower, bool BatteryInverted,
-    string BatteryCharge, string BatteryDischarge, string BatterySoc)
+    string BatteryCharge, string BatteryDischarge, string BatterySoc, bool HasCar = false, string CarPower = "", string CarPlug = "",
+    string CarSoc = "", CarColor CarColor = CarColor.Blue)
 {
     /// <summary>
     /// Lit les réglages. Si un champ requis manque, <paramref name="config"/> est null et <paramref name="problem"/> est un message de statut
@@ -110,15 +111,37 @@ internal sealed record EnergyConfig(LayoutKind Layout, HouseStyle House, string 
                 return false;
             }
         }
+        var hasCar = SettingsReader.Choice(settings, "car_mode", "none", "none", "one") == "one";
+        string carPower = "", carPlug = "", carSoc = "";
+        var carColor = CarColor.Blue;
+        if (hasCar)
+        {
+            carPower = SettingsReader.EntityId(settings, "car_power");
+            carPlug = SettingsReader.EntityId(settings, "car_plug");
+            carSoc = SettingsReader.EntityId(settings, "car_soc");
+            carColor = SettingsReader.Choice(settings, "car_color", "blue", "blue", "yellow", "white") switch
+            {
+                "yellow" => CarColor.Yellow,
+                "white" => CarColor.White,
+                _ => CarColor.Blue,
+            };
+            if (carPower.Length == 0)
+            {
+                problem = "Choisis le capteur de puissance de recharge de la voiture dans les réglages de la case.";
+                return false;
+            }
+        }
+
 
         config = new EnergyConfig(layout, house, solar, gridTwo, grid, gridInverted, gridImport, gridExport,
-            SettingsReader.EntityId(settings, "home"), battery, batteryPower, batteryInverted, batteryCharge, batteryDischarge, batterySoc);
+            SettingsReader.EntityId(settings, "home"), battery, batteryPower, batteryInverted, batteryCharge, batteryDischarge, batterySoc,
+            hasCar, carPower, carPlug, carSoc, carColor);
         return true;
     }
 
     /// <summary>Les capteurs à relire, sans doublon ni vide ; seuls ceux du mode actif.</summary>
     internal IReadOnlyCollection<string> EntityIds =>
-        new[] { Solar, Grid, GridImport, GridExport, Home, BatteryPower, BatteryCharge, BatteryDischarge, BatterySoc }
+        new[] { Solar, Grid, GridImport, GridExport, Home, BatteryPower, BatteryCharge, BatteryDischarge, BatterySoc, CarPower, CarPlug, CarSoc }
             .Where(id => id.Length > 0)
             .Distinct(StringComparer.Ordinal)
             .ToArray();

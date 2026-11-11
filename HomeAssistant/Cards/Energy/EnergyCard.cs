@@ -68,8 +68,8 @@ internal sealed class EnergyCard(CardContext context, EnergyConfig config) : Pol
     {
         foreach (var (id, state) in states)
         {
-            // Le niveau de batterie est en % : ce n'est pas une puissance.
-            if (id != config.BatterySoc && IsUnknownUnit(state.Unit) && _warnedUnits.Add(id))
+            // Les niveaux de batterie et de voiture sont en %, la prise est un tout ou rien : ce ne sont pas des puissances.
+            if (id != config.BatterySoc && id != config.CarSoc && id != config.CarPlug && IsUnknownUnit(state.Unit) && _warnedUnits.Add(id))
             {
                 Context.Services.Log.Warning($"Unité « {state.Unit} » inconnue pour {id} : elle est traitée comme des W.");
             }

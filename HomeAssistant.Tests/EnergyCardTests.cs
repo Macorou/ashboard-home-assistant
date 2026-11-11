@@ -25,12 +25,12 @@ public sealed class EnergyCardTests
     private static void Set(FakeHomeAssistant ha, string id, string state, string unit = "W") =>
         ha.Responses["/api/states/" + id] = (200, StateJson(id, state, unit));
 
-    private static async Task<(ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe)> StartAsync(FakeHomeAssistant ha)
+    private static async Task<(ModuleTestHost<TestableModule> Host, TestableModule.Holder Probe)> StartAsync(FakeHomeAssistant ha, string settings = Settings)
     {
         TestableModule.Handler.Value = ha;
         var probe = new TestableModule.Holder();
         TestableModule.Probe.Value = probe;
-        var host = new ModuleTestHost<TestableModule>(ManifestPath, JsonDocument.Parse(Settings).RootElement);
+        var host = new ModuleTestHost<TestableModule>(ManifestPath, JsonDocument.Parse(settings).RootElement);
         host.Secrets.Set("ha_url", "192.168.1.10:8123");
         host.Secrets.Set("ha_token", "abc");
         await host.StartAsync();
@@ -300,4 +300,25 @@ public sealed class EnergyCardTests
     [InlineData("A", true)]
     public void IsUnknownUnit_AcceptsOnlyWattsAndKilowatts(string? unit, bool unknown) =>
         Assert.Equal(unknown, EnergyCard.IsUnknownUnit(unit));
+
+    [Fact]
+    public async Task Car_IsRead_AndCardStaysOnline_WhenPowerUnavailable()
+    {
+        var ha = Author();
+        Set(ha, "sensor.car_power", "unavailable");
+        Set(ha, "binary_sensor.car_plug", "on", "");
+        Set(ha, "sensor.car_soc", "86", "%");
+        var settings = """
+            { "solar": { "id": "sensor.pv" }, "grid": { "id": "sensor.grid" }, "car_mode": "one",
+              "car_power": { "id": "sensor.car_power" }, "car_plug": { "id": "binary_sensor.car_plug" }, "car_soc": { "id": "sensor.car_soc" } }
+            """;
+        var (host, probe) = await StartAsync(ha, settings);
+        await using var _ = host;
+
+        await WaitUntilAsync(() => CardOf(probe).Current is not null);
+
+        // Le journal du banc d'essai part vers la sortie de trace, sans accès depuis le test : on vérifie l'état de la carte.
+        Assert.Equal(new CarReading(null, true, 86, CarAspect.Waiting), CardOf(probe).Current!.Snapshot.Car);
+        Assert.Equal(ModuleHealth.Online, host.Health);
+    }
 }

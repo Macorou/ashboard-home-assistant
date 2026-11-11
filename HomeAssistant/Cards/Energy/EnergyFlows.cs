@@ -1,14 +1,14 @@
 namespace HomeAssistant;
 
 /// <summary>Les grandeurs mesurées, en W. Une valeur négative est ramenée à 0 au calcul.</summary>
-internal readonly record struct EnergyInput(double Solar, double Import, double Export, double Charge, double Discharge, double? HomeSensor);
+internal readonly record struct EnergyInput(double Solar, double Import, double Export, double Charge, double Discharge, double? HomeSensor, double Car = 0);
 
 /// <summary>
 /// Répartition des flux d'énergie entre panneaux, maison, batterie et réseau (spec § 7), en W. Le soleil sert la maison, puis la batterie, et
 /// le reste part au réseau.
 /// </summary>
 internal sealed record EnergyFlows(double SolarToHome, double BatteryToHome, double GridToHome, double SolarToBattery,
-    double GridToBattery, double SolarToGrid, double BatteryToGrid, double Home, double SolarSharePercent)
+    double GridToBattery, double SolarToGrid, double BatteryToGrid, double Home, double SolarSharePercent, double HomeToCar = 0)
 {
     /// <summary>Sous ce seuil, un flux vaut 0 : il ne doit pas animer le bruit de mesure.</summary>
     internal const double NoiseFloorWatts = 10;
@@ -43,7 +43,9 @@ internal sealed record EnergyFlows(double SolarToHome, double BatteryToHome, dou
             SolarToGrid: BelowNoise(solarToGrid),
             BatteryToGrid: BelowNoise(batteryToGrid),
             Home: home,
-            SolarSharePercent: solarSharePercent);
+            SolarSharePercent: solarSharePercent,
+            // La voiture est servie par la maison ; elle ne s'ajoute pas à la consommation « Home ».
+            HomeToCar: CarState.AspectOf(input.Car, null) == CarAspect.Charging ? BelowNoise(Clamp(input.Car)) : 0);
     }
 
     private static double Clamp(double watts) => Math.Max(0, watts);

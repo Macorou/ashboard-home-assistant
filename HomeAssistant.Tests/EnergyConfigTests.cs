@@ -134,4 +134,55 @@ public sealed class EnergyConfigTests
 
         Assert.Equal("sensor.imp", config!.GridImport);
     }
+
+    private static string Base => $$"""{"solar":{{Entity("sensor.pv")}},"grid":{{Entity("sensor.grid")}}""";
+
+    [Fact]
+    public void Car_ReadsAllFields()
+    {
+        var json = Base + $$""","car_mode":"one","car_power":{{Entity("sensor.car_power")}},"car_plug":{{Entity("binary_sensor.car_plug")}},"car_soc":{{Entity("sensor.car_soc")}},"car_color":"yellow"}""";
+
+        Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.True(config!.HasCar);
+        Assert.Equal("sensor.car_power", config.CarPower);
+        Assert.Equal("binary_sensor.car_plug", config.CarPlug);
+        Assert.Equal("sensor.car_soc", config.CarSoc);
+        Assert.Equal(CarColor.Yellow, config.CarColor);
+        Assert.Contains("sensor.car_power", config.EntityIds);
+        Assert.Contains("binary_sensor.car_plug", config.EntityIds);
+        Assert.Contains("sensor.car_soc", config.EntityIds);
+    }
+
+    [Fact]
+    public void Car_WithoutPowerSensor_IsNotConfigured()
+    {
+        var ok = EnergyConfig.TryRead(Settings(Base + ""","car_mode":"one"}"""), out var config, out var problem);
+
+        Assert.False(ok);
+        Assert.Null(config);
+        Assert.Equal("Choisis le capteur de puissance de recharge de la voiture dans les réglages de la case.", problem);
+    }
+
+    [Fact]
+    public void Car_ModeNone_IgnoresLeftoverFields()
+    {
+        var json = Base + $$""","car_mode":"none","car_power":{{Entity("sensor.car_power")}}}""";
+
+        Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.False(config!.HasCar);
+        Assert.Equal("", config.CarPower);
+        Assert.DoesNotContain(config.EntityIds, id => id.Contains("car"));
+    }
+
+    [Fact]
+    public void Car_DefaultColor_IsBlue()
+    {
+        var json = Base + $$""","car_mode":"one","car_power":{{Entity("sensor.car_power")}}}""";
+
+        Assert.True(EnergyConfig.TryRead(Settings(json), out var config, out _));
+
+        Assert.Equal(CarColor.Blue, config!.CarColor);
+    }
 }
