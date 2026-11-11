@@ -396,5 +396,166 @@ public sealed class EnergyRendererTests
     }
 #endif
 
+    // ----- Voiture -----
+
+    private static readonly SKColor CarPink = SKColor.Parse("#ff7eb6");
+
+    private static EnergyConfig CarConfig(LayoutKind layout = LayoutKind.Left, bool battery = false) =>
+        Config(layout, battery) with { HasCar = true, CarPower = "sensor.car", CarPlug = "binary_sensor.plug", CarSoc = "sensor.car_soc" };
+
+    private static EnergyState CarState(CarAspect aspect, double? watts = null, double? soc = 86, double solar = 0, double import = 0, bool stale = false)
+    {
+        var power = watts ?? (aspect == CarAspect.Charging ? 7400 : 0);
+        var input = new EnergyInput(solar, import, 0, 0, 0, null, power);
+        var reading = new CarReading(power, aspect != CarAspect.Unplugged, soc, aspect);
+        return new EnergyState(new EnergySnapshot(input, null, true, null, reading), EnergyFlows.Compute(input), stale);
+    }
+
+    private static SKRect CarBox(LayoutKind layout = LayoutKind.Left, bool battery = false)
+    {
+        var car = Assert.Single(EnergyLayouts.Get(layout, battery, true).Arts, a => a.Kind == ArtKind.CarBlue);
+        return new SKRect(car.X, car.Y, car.X + 106 * car.Scale, car.Y + 86 * car.Scale);
+    }
+
+    private static long AlphaSum(SKBitmap bitmap, SKRect box)
+    {
+        long sum = 0;
+        for (var y = (int)Math.Max(0, box.Top); y < Math.Min(bitmap.Height, box.Bottom); y++)
+            for (var x = (int)Math.Max(0, box.Left); x < Math.Min(bitmap.Width, box.Right); x++)
+                sum += bitmap.GetPixel(x, y).Alpha;
+        return sum;
+    }
+
+    private static bool IsPink(SKColor c) =>
+        c.Alpha > 200 && Math.Abs(c.Red - CarPink.Red) < 40 && Math.Abs(c.Green - CarPink.Green) < 40 && Math.Abs(c.Blue - CarPink.Blue) < 40;
+
+    private static int PinkCount(SKBitmap bitmap, SKRect zone)
+    {
+        var count = 0;
+        for (var y = (int)Math.Max(0, zone.Top); y < Math.Min(bitmap.Height, zone.Bottom); y++)
+            for (var x = (int)Math.Max(0, zone.Left); x < Math.Min(bitmap.Width, zone.Right); x++)
+                if (IsPink(bitmap.GetPixel(x, y))) count++;
+        return count;
+    }
+
+    private static SKRect CarValueZone(LayoutKind layout = LayoutKind.Left, bool battery = false)
+    {
+        var slot = Assert.Single(EnergyLayouts.Get(layout, battery, true).Texts, t => t.Role == "carValue");
+        return new SKRect(slot.X, slot.Y - slot.Size, EnergyLayouts.Width, slot.Y + slot.Size * .3f);
+    }
+
+    [Theory]
+    [InlineData("Unplugged")]
+    [InlineData("Waiting")]
+    [InlineData("Charging")]
+    public void Render_Car_DrawsTheCar_InEachAspect(string aspect)
+    {
+        using var renderer = new EnergyRenderer(CarConfig());
+        using var withCar = Draw(renderer, CarState(Enum.Parse<CarAspect>(aspect)));
+
+        Assert.True(AlphaSum(withCar, CarBox()) > 20_000);
+    }
+
+    [Fact]
+    public void Render_Unplugged_IsDimmerThanWaiting()
+    {
+        using var unplugged = new EnergyRenderer(CarConfig());
+        using var waiting = new EnergyRenderer(CarConfig());
+        using var a = Draw(unplugged, CarState(CarAspect.Unplugged));
+        using var b = Draw(waiting, CarState(CarAspect.Waiting));
+
+        Assert.True(AlphaSum(a, CarBox()) < .75 * AlphaSum(b, CarBox()));
+    }
+
+    [Fact]
+    public void Render_Charging_ShowsPinkValue_AndAnimates()
+    {
+        using var renderer = new EnergyRenderer(CarConfig());
+        var state = CarState(CarAspect.Charging);
+        using var bitmap = Draw(renderer, state);
+
+        Assert.True(PinkCount(bitmap, CarValueZone()) > 20);
+        Assert.True(renderer.IsAnimating(state));
+    }
+
+    [Fact]
+    public void Render_Waiting_DoesNotAnimate_WhenNothingElseMoves()
+    {
+        using var renderer = new EnergyRenderer(CarConfig());
+        var state = CarState(CarAspect.Waiting);
+        using var first = Draw(renderer, state);
+        using var second = Draw(renderer, state, now: Start.AddSeconds(5));
+
+        Assert.False(renderer.IsAnimating(state));
+    }
+
+    [Fact]
+    public void Render_CarModeNone_SameAsBefore()
+    {
+        var input = new EnergyInput(1500, 300, 0, 0, 0, null, 7400);
+        var leftover = new CarReading(7400, true, 50, CarAspect.Charging);
+        var withLeftovers = new EnergyState(new EnergySnapshot(input, null, true, null, leftover), EnergyFlows.Compute(input), false);
+        var before = new EnergyState(new EnergySnapshot(input with { Car = 0 }, null, true, null), EnergyFlows.Compute(input with { Car = 0 }), false);
+
+        using var a = new EnergyRenderer(Config(LayoutKind.Left) with { CarPower = "sensor.car", CarPlug = "x", CarSoc = "y", CarColor = CarColor.Yellow });
+        using var b = new EnergyRenderer(Config(LayoutKind.Left));
+        using var bitmapA = Draw(a, withLeftovers);
+        using var bitmapB = Draw(b, before);
+
+        Assert.True(Bytes(bitmapA).AsSpan().SequenceEqual(Bytes(bitmapB)));
+    }
+
+    [Fact]
+    public void Render_CarPowerUnknown_ShowsDash()
+    {
+        var input = new EnergyInput(0, 0, 0, 0, 0, null);
+        var unknown = new EnergyState(new EnergySnapshot(input, null, true, null, new CarReading(null, true, null, CarAspect.Waiting)), EnergyFlows.Compute(input), false);
+        using var renderer = new EnergyRenderer(CarConfig());
+        using var other = new EnergyRenderer(CarConfig());
+        using var dash = Draw(renderer, unknown);
+        using var zero = Draw(other, CarState(CarAspect.Waiting));
+        var zone = CarValueZone();
+
+        Assert.True(InkCount(Crop(dash, zone)) > 0);
+        Assert.False(Bytes(Crop(dash, zone)).AsSpan().SequenceEqual(Bytes(Crop(zero, zone))));
+    }
+
+    private static SKBitmap Crop(SKBitmap source, SKRect zone)
+    {
+        var crop = new SKBitmap((int)zone.Width, (int)zone.Height);
+        using var canvas = new SKCanvas(crop);
+        canvas.DrawBitmap(source, -zone.Left, -zone.Top);
+        return crop;
+    }
+
+    [Theory]
+    [InlineData("Top")]
+    [InlineData("Left")]
+    [InlineData("Bottom")]
+    public void Render_HugeCarPower_StaysInsideCard_At5x3(string layout)
+    {
+        var kind = Enum.Parse<LayoutKind>(layout);
+        using var renderer = new EnergyRenderer(CarConfig(kind));
+        var state = CarState(CarAspect.Charging, watts: 11000);
+        const float Width = 500, Height = 310;
+        using var bitmap = new SKBitmap(700, 434);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        var ctx = new ModuleRenderContext(new SKRect(40, 40, 40 + Width, 40 + Height), new GridSize(5, 3), TestTheme(), 1.3f, Start);
+        renderer.Render(canvas, ctx, state);
+
+        Assert.Equal(0, PinkCount(bitmap, new SKRect(0, 0, 40, 434)));
+        Assert.Equal(0, PinkCount(bitmap, new SKRect(40 + Width, 0, 700, 434)));
+        Assert.Equal(0, PinkCount(bitmap, new SKRect(40 + Width - 4, 0, 40 + Width, 434)));
+    }
+
+    [Fact]
+    public void CarLabel_Texts()
+    {
+        Assert.Equal("Voiture · en charge · 86 %", EnergyRenderer.CarLabel(new CarReading(7400, true, 86, CarAspect.Charging)));
+        Assert.Equal("Voiture · branchée", EnergyRenderer.CarLabel(new CarReading(0, true, null, CarAspect.Waiting)));
+        Assert.Equal("Voiture · débranchée · 12 %", EnergyRenderer.CarLabel(new CarReading(0, false, 12.4, CarAspect.Unplugged)));
+    }
+
     private static byte[] Bytes(SKBitmap bitmap) => bitmap.Bytes;
 }

@@ -38,7 +38,17 @@ internal sealed class EnergyRenderer : IDisposable
 
     private static readonly SKPath PanelPlane = BuildPanelPlane();
 
-    private readonly record struct Quantities(double Solar, double Home, double Export, double Import, double Charge, double Discharge);
+    private static readonly SKColor CarPink = SKColor.Parse("#ff7eb6");
+    private static readonly SKColor CarWaitingColor = SKColor.Parse("#c98aa8");
+    private static readonly SKColor PlugColor = SKColor.Parse("#c9d1de");
+    private static readonly SKColor BadgeDisc = new(20, 24, 32, 217);
+    private const float UnpluggedOpacity = .55f;
+    private const float WaitingLineOpacity = .16f;
+
+    private static readonly SKPath PlugShape = BuildPlug();
+    private static readonly SKPath BoltShape = BuildBolt();
+
+    private readonly record struct Quantities(double Solar, double Home, double Export, double Import, double Charge, double Discharge, double Car);
 
     private readonly EnergyConfig _config;
     private readonly EnergyLayout _layout;
@@ -50,6 +60,7 @@ internal sealed class EnergyRenderer : IDisposable
     private readonly SKPaint _stroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeJoin = SKStrokeJoin.Round };
     private readonly SKPaint _image = new() { IsAntialias = true };
     private readonly SKPath _scratch = new();
+    private readonly SKColorFilter _unpluggedFilter = BuildUnpluggedFilter();
     private Theme? _fontTheme;
     private SKFont? _measureFont;
     private Quantities? _shown;
@@ -59,10 +70,14 @@ internal sealed class EnergyRenderer : IDisposable
     internal EnergyRenderer(EnergyConfig config)
     {
         _config = config;
-        _layout = EnergyLayouts.Get(config.Layout, config.Battery != BatteryMode.None);
+        _layout = EnergyLayouts.Get(config.Layout, config.Battery != BatteryMode.None, config.HasCar);
     }
 
     private bool HasBattery => _config.Battery != BatteryMode.None;
+
+    /// <summary>Ce qu'on sait de la voiture : sans lecture (ou sans voiture réglée), elle compte comme débranchée et sans mesure.</summary>
+    private CarReading? CarOf(EnergyState state) =>
+        _config.HasCar ? state.Snapshot.Car ?? new CarReading(null, null, null, CarAspect.Unplugged) : null;
 
     /// <summary>Vrai tant que quelque chose bouge : un flux, le reflet des panneaux, la jauge qui respire, ou des valeurs qui n'ont pas fini de s'approcher de leur cible.</summary>
     internal bool IsAnimating(EnergyState? state)
@@ -70,7 +85,7 @@ internal sealed class EnergyRenderer : IDisposable
         if (state is null || state.Stale) return false;
         var flows = state.Flows;
         if (flows.SolarToHome > 0 || flows.SolarToGrid > 0 || flows.GridToHome > 0 || flows.SolarToBattery > 0
-            || flows.BatteryToHome > 0 || flows.GridToBattery > 0 || flows.BatteryToGrid > 0)
+            || flows.BatteryToHome > 0 || flows.GridToBattery > 0 || flows.BatteryToGrid > 0 || (_config.HasCar && flows.HomeToCar > 0))
         {
             return true;
         }
@@ -120,7 +135,9 @@ internal sealed class EnergyRenderer : IDisposable
         canvas.Translate(originX, originY);
         canvas.Scale(scale);
         DrawHalos(canvas, shown, stale);
-        _filaments.Draw(canvas, _layout, stale ? Still(state.Flows) : state.Flows);
+        var car = CarOf(state);
+        var carLine = car?.Aspect switch { CarAspect.Unplugged => 0f, CarAspect.Waiting => WaitingLineOpacity, _ => -1f };
+        _filaments.Draw(canvas, _layout, stale ? Still(state.Flows) : state.Flows, carLine);
         canvas.Restore();
 
         foreach (var placement in _layout.Arts)
@@ -137,7 +154,8 @@ internal sealed class EnergyRenderer : IDisposable
         var input = state.Snapshot.Input;
         var battery = HasBattery;
         return new Quantities(Math.Max(0, input.Solar), state.Flows.Home, Math.Max(0, input.Export), Math.Max(0, input.Import),
-            battery ? Math.Max(0, input.Charge) : 0, battery ? Math.Max(0, input.Discharge) : 0);
+            battery ? Math.Max(0, input.Charge) : 0, battery ? Math.Max(0, input.Discharge) : 0,
+            CarOf(state)?.Watts is { } carWatts ? Math.Max(0, carWatts) : 0);
     }
 
     private static int BatteryDirection(Quantities q) =>
@@ -145,10 +163,11 @@ internal sealed class EnergyRenderer : IDisposable
 
     private static bool Settled(Quantities a, Quantities b) =>
         Math.Abs(a.Solar - b.Solar) < SettledWatts && Math.Abs(a.Home - b.Home) < SettledWatts && Math.Abs(a.Export - b.Export) < SettledWatts
-        && Math.Abs(a.Import - b.Import) < SettledWatts && Math.Abs(a.Charge - b.Charge) < SettledWatts && Math.Abs(a.Discharge - b.Discharge) < SettledWatts;
+        && Math.Abs(a.Import - b.Import) < SettledWatts && Math.Abs(a.Charge - b.Charge) < SettledWatts && Math.Abs(a.Discharge - b.Discharge) < SettledWatts
+        && Math.Abs(a.Car - b.Car) < SettledWatts;
 
     private static EnergyFlows Still(EnergyFlows flows) =>
-        flows with { SolarToHome = 0, BatteryToHome = 0, GridToHome = 0, SolarToBattery = 0, GridToBattery = 0, SolarToGrid = 0, BatteryToGrid = 0 };
+        flows with { SolarToHome = 0, BatteryToHome = 0, GridToHome = 0, SolarToBattery = 0, GridToBattery = 0, SolarToGrid = 0, BatteryToGrid = 0, HomeToCar = 0 };
 
     /// <summary>Avance l'horloge, adoucit les valeurs affichées vers leur cible et fait avancer les filaments. La première image prend la cible telle quelle.</summary>
     private void Step(DateTimeOffset now, EnergyState state, Quantities target)
@@ -165,7 +184,7 @@ internal sealed class EnergyRenderer : IDisposable
             var k = 1 - Math.Exp(-dt / EaseSeconds);
             double Ease(double from, double to) => from + (to - from) * k;
             _shown = new Quantities(Ease(shown.Solar, target.Solar), Ease(shown.Home, target.Home), Ease(shown.Export, target.Export),
-                Ease(shown.Import, target.Import), Ease(shown.Charge, target.Charge), Ease(shown.Discharge, target.Discharge));
+                Ease(shown.Import, target.Import), Ease(shown.Charge, target.Charge), Ease(shown.Discharge, target.Discharge), Ease(shown.Car, target.Car));
         }
 
         if (!state.Stale)
@@ -222,14 +241,27 @@ internal sealed class EnergyRenderer : IDisposable
         Quantities q, EnergyState state, bool selling)
     {
         var kind = placement.Kind == ArtKind.HouseModern && _config.House == HouseStyle.Classic ? ArtKind.HouseClassic : placement.Kind;
+        if (kind == ArtKind.CarBlue) kind = CarArt.KindFor(_config.CarColor);
         var total = layoutScale * placement.Scale;
         var art = _art.Get(kind, total);
+        var car = CarOf(state);
 
         // Images posées sur des pixels entiers ; les lumières vectorielles partent du même point pour rester collées au dessin.
         var left = MathF.Round(originX + layoutScale * placement.X - art.Origin.X);
         var top = MathF.Round(originY + layoutScale * placement.Y - art.Origin.Y);
         var sampling = new SKSamplingOptions();
-        canvas.DrawImage(art.Dark, left, top, sampling, null);
+        if (kind is ArtKind.CarBlue or ArtKind.CarYellow or ArtKind.CarWhite && car?.Aspect == CarAspect.Unplugged)
+        {
+            // Débranchée : la voiture s'efface, presque grise et sombre.
+            _image.Color = SKColors.White.WithAlpha((byte)Math.Round(UnpluggedOpacity * 255));
+            _image.ColorFilter = _unpluggedFilter;
+            canvas.DrawImage(art.Dark, left, top, sampling, _image);
+            _image.ColorFilter = null;
+        }
+        else
+        {
+            canvas.DrawImage(art.Dark, left, top, sampling, null);
+        }
 
         var lit = kind switch
         {
@@ -251,7 +283,80 @@ internal sealed class EnergyRenderer : IDisposable
             case ArtKind.Panels: DrawSheen(canvas, q.Solar); break;
             case ArtKind.Pylon: DrawInsulators(canvas, selling); break;
             case ArtKind.Battery: DrawGauge(canvas, state); break;
+            case ArtKind.CarBlue or ArtKind.CarYellow or ArtKind.CarWhite: DrawCarBadge(canvas, car?.Aspect ?? CarAspect.Unplugged); break;
         }
+        canvas.Restore();
+    }
+
+    /// <summary>Désature (0,15) et assombrit (0,75) : la voiture débranchée.</summary>
+    private static SKColorFilter BuildUnpluggedFilter()
+    {
+        const float Saturation = .15f, Darken = .75f;
+        float[] luma = [.2126f, .7152f, .0722f];
+        var matrix = new float[20];
+        for (var row = 0; row < 3; row++)
+        {
+            for (var column = 0; column < 3; column++)
+            {
+                matrix[row * 5 + column] = Darken * (luma[column] * (1 - Saturation) + (row == column ? Saturation : 0));
+            }
+        }
+        matrix[18] = 1;
+        return SKColorFilter.CreateColorMatrix(matrix);
+    }
+
+    // Tracés du badge, tirés de la maquette « voiture », centrés sur (0, 0).
+    private static SKPath BuildPlug()
+    {
+        var path = new SKPath();
+        path.MoveTo(-3, -6); path.LineTo(-3, -2);
+        path.MoveTo(3, -6); path.LineTo(3, -2);
+        path.MoveTo(-5, -2); path.LineTo(5, -2); path.LineTo(5, .5f);
+        path.ArcTo(5, 5, 0, SKPathArcSize.Small, SKPathDirection.Clockwise, -5, .5f);
+        path.Close();
+        path.MoveTo(0, 5); path.LineTo(0, 8);
+        return path;
+    }
+
+    private static SKPath BuildBolt()
+    {
+        var path = new SKPath();
+        path.MoveTo(1.5f, -6); path.LineTo(-3.5f, 1); path.LineTo(-.2f, 1); path.LineTo(-1.5f, 6);
+        path.LineTo(3.5f, -1); path.LineTo(.2f, -1);
+        path.Close();
+        return path;
+    }
+
+    /// <summary>La pastille au-dessus du toit : une prise quand la voiture est branchée, un éclair rose qui pulse quand elle charge. Coordonnées locales de la voiture.</summary>
+    private void DrawCarBadge(SKCanvas canvas, CarAspect aspect)
+    {
+        if (aspect == CarAspect.Unplugged) return;
+        var charging = aspect == CarAspect.Charging;
+        var color = charging ? CarPink : PlugColor;
+        var opacity = charging ? .55 + .45 * (.5 + .5 * Math.Sin(_clock * 3.9)) : 1;
+
+        canvas.Save();
+        canvas.Translate(CarArt.BadgeAnchor.X, CarArt.BadgeAnchor.Y);
+
+        _fill.Color = Fade(BadgeDisc, (float)opacity);
+        canvas.DrawCircle(0, 0, 9, _fill);
+        _stroke.StrokeWidth = 1.4f;
+        _stroke.Color = Fade(color, (float)opacity);
+        canvas.DrawCircle(0, 0, 9, _stroke);
+
+        if (charging)
+        {
+            _fill.Color = Fade(color, (float)opacity);
+            canvas.DrawPath(BoltShape, _fill);
+        }
+        else
+        {
+            _stroke.StrokeWidth = 1.5f;
+            _stroke.StrokeCap = SKStrokeCap.Round;
+            canvas.DrawPath(PlugShape, _stroke);
+            _stroke.StrokeCap = SKStrokeCap.Butt;
+        }
+
         canvas.Restore();
     }
 
@@ -348,6 +453,7 @@ internal sealed class EnergyRenderer : IDisposable
         var hasShareSlot = _layout.Texts.Any(slot => slot.Role == "share");
         var fade = state.Stale ? StaleOpacity : 1f;
         var gridColor = selling ? SellColor : BuyColor;
+        var car = CarOf(state);
 
         foreach (var slot in _layout.Texts)
         {
@@ -364,6 +470,12 @@ internal sealed class EnergyRenderer : IDisposable
                 case "gridValue":
                     DrawValue(canvas, ctx, slot, FormatPower(Math.Max(shown.Export, shown.Import)), gridColor, layoutScale, originX, originY, fade);
                     break;
+                case "carLabel" when car is not null: DrawLabel(canvas, ctx, slot, CarLabel(car), layoutScale, originX, originY, fade); break;
+                case "carValue" when car is not null:
+                    DrawValue(canvas, ctx, slot, car.Watts is null ? "—" : FormatPower(shown.Car),
+                        car.Aspect switch { CarAspect.Charging => CarPink, CarAspect.Waiting => CarWaitingColor, _ => ctx.Theme.TextMuted },
+                        layoutScale, originX, originY, fade);
+                    break;
                 case "batLabel": DrawLabel(canvas, ctx, slot, BatteryLabel(state, target), layoutScale, originX, originY, fade); break;
                 case "batValue":
                     DrawValue(canvas, ctx, slot, state.Snapshot.BatteryPowerKnown ? FormatPower(Math.Max(shown.Charge, shown.Discharge)) : "—",
@@ -378,6 +490,18 @@ internal sealed class EnergyRenderer : IDisposable
         var direction = BatteryDirection(target);
         var name = direction > 0 ? "En charge" : direction < 0 ? "En décharge" : "Batterie";
         return state.Snapshot.BatterySocPercent is { } soc ? $"{name} · {(int)Math.Round(soc, MidpointRounding.AwayFromZero)} %" : name;
+    }
+
+    /// <summary>« Voiture · en charge · 86 % » : l'état, puis le niveau de la batterie quand on le connaît.</summary>
+    internal static string CarLabel(CarReading car)
+    {
+        var name = car.Aspect switch
+        {
+            CarAspect.Charging => "Voiture · en charge",
+            CarAspect.Waiting => "Voiture · branchée",
+            _ => "Voiture · débranchée",
+        };
+        return car.SocPercent is { } soc ? $"{name} · {(int)Math.Round(soc, MidpointRounding.AwayFromZero)} %" : name;
     }
 
     private void DrawLabel(SKCanvas canvas, ModuleRenderContext ctx, TextSlot slot, string text, float layoutScale, float originX, float originY, float fade)
@@ -479,5 +603,6 @@ internal sealed class EnergyRenderer : IDisposable
         _stroke.Dispose();
         _image.Dispose();
         _scratch.Dispose();
+        _unpluggedFilter.Dispose();
     }
 }
