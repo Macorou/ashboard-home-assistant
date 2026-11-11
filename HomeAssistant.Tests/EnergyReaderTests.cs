@@ -218,6 +218,18 @@ public sealed class EnergyReaderTests
     }
 
     [Fact]
+    public void Car_FiftyWatts_IsTheChargingThreshold()
+    {
+        var at = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_power", "50")));
+        var below = EnergyReader.Combine(CarConfig(), States(S("sensor.pv", "0"), S("sensor.grid", "0"), S("sensor.car_power", "49.9")));
+
+        Assert.Equal(CarAspect.Charging, at.Car!.Aspect);
+        Assert.Equal(50, EnergyFlows.Compute(at.Input).HomeToCar);
+        Assert.NotEqual(CarAspect.Charging, below.Car!.Aspect);
+        Assert.Equal(0, EnergyFlows.Compute(below.Input).HomeToCar);
+    }
+
+    [Fact]
     public void Car_PowerUnavailable_PlugOn()
     {
         var snapshot = EnergyReader.Combine(CarConfig(),

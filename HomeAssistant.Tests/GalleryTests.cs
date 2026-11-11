@@ -63,6 +63,7 @@ public sealed class GalleryTests
     private static readonly CarCase Charging = new("charging", 7400, "on", 86, "blue");
     private static readonly CarCase Waiting = new("waiting", 0, "on", 86, "blue");
     private static readonly CarCase Unplugged = new("unplugged", 0, "off", 86, "blue");
+    private static readonly CarCase UnpluggedFull = new("unplugged-full", 0, "off", 100, "blue"); // le libellé le plus long : « Voiture · débranchée · 100 % »
 
     private static string SettingsJson(string layout, string house, bool battery, CarCase? car = null) =>
         $$"""
@@ -238,6 +239,12 @@ public sealed class GalleryTests
         }
 
         written.AddRange(await WriteSetAsync(directory, "left", "modern", false, Scenarios[0], Sizes, Themes, "", Charging));
+
+        // Le libellé le plus long de la voiture en haut, à côté du texte du réseau : les polices larges des thèmes pixel et liquid-glass.
+        foreach (var battery in new[] { false, true })
+        {
+            written.AddRange(await WriteSetAsync(directory, "top", "modern", battery, Scenarios[0], [(6, 4)], ["liquid-glass", "pixel"], "", UnpluggedFull));
+        }
         foreach (var color in new[] { "blue", "yellow", "white" })
         {
             written.AddRange(await WriteSetAsync(directory, "left", "modern", false, Scenarios[0], [(6, 4)], ["classique"], "", Charging with { Color = color }, true));
@@ -247,8 +254,8 @@ public sealed class GalleryTests
         written.AddRange(await WriteDailyAsync(directory, "list", [(2, 3), (2, 4), (3, 4)]));
 
         // 3 dispositions x 2 maisons x 2 (batterie) x (9 soleil + 2 scénarios), puis la voiture (3 dispositions x 2 x 3 aspects, 9 tailles et thèmes
-        // pour « left » en charge, 3 couleurs), puis 6 tailles du Bilan du jour x 3 thèmes.
-        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + (3 * 2 * 3 - 1 + 3 * 3 + 3) + 6 * 3, written.Count);
+        // pour « left » en charge, 3 couleurs, 4 libellés longs en haut), puis 6 tailles du Bilan du jour x 3 thèmes.
+        Assert.Equal(3 * 2 * 2 * (3 * 3 + 2) + (3 * 2 * 3 - 1 + 3 * 3 + 3 + 2 * 2) + 6 * 3, written.Count);
         Assert.All(written, file => Assert.True(new FileInfo(file).Length > 2000, file));
         foreach (var theme in Themes)
         {

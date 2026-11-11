@@ -13,8 +13,9 @@ internal sealed record FlowPath(FlowKey Key, SKColor Color, SKPoint[] Bezier);
 /// <summary>
 /// Un emplacement de texte. Rôles : <c>solarLabel</c>, <c>solarValue</c>, <c>homeLabel</c>, <c>homeValue</c>, <c>gridLabel</c>, <c>gridValue</c>,
 /// <c>batLabel</c>, <c>batValue</c>, <c>carLabel</c>, <c>carValue</c> et <c>share</c> (la part solaire sur sa propre ligne ; absent, elle suit « Consommation · »).
+/// Largeur maximale facultative (espace 700 × 434) : absente, le texte s'arrête au bord de la carte ; présente, il rétrécit pour tenir dans cette largeur.
 /// </summary>
-internal sealed record TextSlot(string Role, float X, float Y, bool Centered, float Size);
+internal sealed record TextSlot(string Role, float X, float Y, bool Centered, float Size, float? MaxWidth = null);
 
 /// <summary>Un halo de fond. Rôles : <c>solar</c>, <c>exp</c>, <c>imp</c>, <c>home</c>, <c>bat</c>.</summary>
 internal sealed record HaloSpot(string Role, float X, float Y, float Radius);
@@ -71,11 +72,14 @@ internal static class EnergyLayouts
         new(key, color, [new(x0, y0), new(x1, y1), new(x2, y2), new(x3, y3)]);
 
     /// <summary>La voiture posée par son centre : le dessin occupe environ 106 × 86 dans sa boîte, l'échelle vient de la largeur voulue.</summary>
-    private static ArtPlacement CarArt(float width, float centerX, float centerY)
+    private static ArtPlacement CarPlacement(float width, float centerX, float centerY)
     {
         var scale = width / 106;
         return Art(ArtKind.CarBlue, centerX - width / 2, centerY - 86 * scale / 2, scale);
     }
+
+    /// <summary>Largeur des textes de la voiture en disposition « top » : de x 378 jusqu'avant le texte du réseau.</summary>
+    internal const float TopCarTextWidth = 120;
 
     private static readonly string[] BatteryRoles = ["solarLabel", "solarValue", "batLabel", "batValue", "gridLabel", "gridValue"];
 
@@ -91,10 +95,11 @@ internal static class EnergyLayouts
         {
             case LayoutKind.Top:
                 // Voiture plus petite et plus basse : le badge reste sous le flux réseau vers maison, et le texte ne touche pas « Vendu au réseau ».
-                car = CarArt(90, 322, 396);
+                car = CarPlacement(90, 322, 396);
                 flow = Flow(FlowKey.HomeToCar, Pink, 226, 330, 243, 352, 257, 372, 276, 384);
-                texts.Add(Label("carLabel", 378, 386, false));
-                texts.Add(Value("carValue", 378, 420, false, 28));
+                // Le texte partage la ligne de « Vendu au réseau » (centré en 580) : sa largeur s'arrête avant lui et le texte rétrécit au besoin.
+                texts.Add(Label("carLabel", 378, 386, false) with { MaxWidth = TopCarTextWidth });
+                texts.Add(Value("carValue", 378, 420, false, 28) with { MaxWidth = TopCarTextWidth });
                 if (bat)
                 {
                     // Le flux réseau vers maison prend le tracé sans batterie (au-dessus du badge), et le texte de la batterie remonte d'autant.
@@ -108,7 +113,7 @@ internal static class EnergyLayouts
 
             case LayoutKind.Left:
                 // Un peu plus bas et à gauche : le flux réseau vers maison passe au-dessus du badge.
-                car = CarArt(112, 290, 385);
+                car = CarPlacement(112, 290, 385);
                 flow = Flow(FlowKey.HomeToCar, Pink, 258, 262, 268, 290, 276, 312, 282, 332);
                 if (bat)
                 {
@@ -130,8 +135,8 @@ internal static class EnergyLayouts
                 break;
 
             default:
-                // Au sol, à droite de la maison ; les textes de droite se resserrent au-dessus de la voiture (à régler sur la galerie).
-                car = CarArt(100, 590, 391);
+                // Au sol, à droite de la maison ; les textes de droite se resserrent au-dessus de la voiture.
+                car = CarPlacement(100, 590, 391);
                 flow = Flow(FlowKey.HomeToCar, Pink, 470, 380, 495, 386, 518, 393, 544, 397);
                 texts.RemoveAll(t => t.Role is "gridLabel" or "gridValue" or "batLabel" or "batValue");
                 if (bat)

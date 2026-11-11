@@ -132,7 +132,6 @@ internal sealed record EnergyConfig(LayoutKind Layout, HouseStyle House, string 
             }
         }
 
-
         config = new EnergyConfig(layout, house, solar, gridTwo, grid, gridInverted, gridImport, gridExport,
             SettingsReader.EntityId(settings, "home"), battery, batteryPower, batteryInverted, batteryCharge, batteryDischarge, batterySoc,
             hasCar, carPower, carPlug, carSoc, carColor);

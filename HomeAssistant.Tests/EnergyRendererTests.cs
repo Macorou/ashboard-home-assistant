@@ -1,3 +1,4 @@
+using AshboardVision.Sdk.Testing;
 using SkiaSharp;
 using Trofeo.ModuleKit;
 
@@ -555,6 +556,59 @@ public sealed class EnergyRendererTests
         Assert.Equal("Voiture · en charge · 86 %", EnergyRenderer.CarLabel(new CarReading(7400, true, 86, CarAspect.Charging)));
         Assert.Equal("Voiture · branchée", EnergyRenderer.CarLabel(new CarReading(0, true, null, CarAspect.Waiting)));
         Assert.Equal("Voiture · débranchée · 12 %", EnergyRenderer.CarLabel(new CarReading(0, false, 12.4, CarAspect.Unplugged)));
+    }
+
+    /// <summary>Le vrai thème (police comprise) tel que l'hôte de test le fournit : celui de la case, pas le thème de test à police par défaut.</summary>
+    private static async Task<Theme> RealThemeAsync(string name)
+    {
+        var ha = new FakeHomeAssistant();
+        foreach (var id in new[] { "sensor.pv", "sensor.grid" })
+            ha.Responses["/api/states/" + id] = (200, System.Text.Json.JsonSerializer.Serialize(new { entity_id = id, state = "0", attributes = new { unit_of_measurement = "W" } }));
+        TestableModule.Handler.Value = ha;
+        var probe = new TestableModule.Holder();
+        TestableModule.Probe.Value = probe;
+        var settings = """{ "layout": "top", "house": "modern", "solar": { "id": "sensor.pv" }, "grid": { "id": "sensor.grid" } }""";
+        await using var host = new ModuleTestHost<TestableModule>(Path.Combine(AppContext.BaseDirectory, "manifest.json"), System.Text.Json.JsonDocument.Parse(settings).RootElement);
+        host.Secrets.Set("ha_url", "192.168.1.10:8123");
+        host.Secrets.Set("ha_token", "abc");
+        await host.StartAsync();
+        using var _ = host.Render(new GridSize(6, 4), name);
+        return probe.Module!.LastTheme!;
+    }
+
+    [Theory]
+    [InlineData("classique", "Unplugged", false)]
+    [InlineData("classique", "Charging", true)]
+    [InlineData("liquid-glass", "Unplugged", false)]
+    [InlineData("liquid-glass", "Charging", true)]
+    [InlineData("pixel", "Unplugged", false)]
+    [InlineData("pixel", "Charging", true)]
+    [InlineData("pixel", "Unplugged", true)]
+    [InlineData("liquid-glass", "Unplugged", true)]
+    public async Task Render_TopCar_LongLabel_BigText_StopsBeforeTheGridLabel(string themeName, string aspect, bool battery)
+    {
+        const float textScale = 1.3f;
+        var theme = await RealThemeAsync(themeName);
+        var carAspect = Enum.Parse<CarAspect>(aspect);
+
+        using var plain = new EnergyRenderer(Config(LayoutKind.Top, battery));
+        using var withCar = new EnergyRenderer(CarConfig(LayoutKind.Top, battery));
+        var context = new ModuleRenderContext(new SKRect(0, 0, 700, 434), new GridSize(6, 4), theme, textScale, Start);
+        using var a = new SKBitmap(700, 434);
+        using var b = new SKBitmap(700, 434);
+        using (var canvas = new SKCanvas(a)) plain.Render(canvas, context, State(import: 500, soc: battery ? 64 : null));
+        using (var canvas = new SKCanvas(b)) withCar.Render(canvas, context, CarState(carAspect, soc: 100, import: 500));
+
+        // Le bord gauche du texte du réseau (centré en 580), mesuré avec la police du thème ; le texte de la voiture est ce qui change entre les deux images.
+        using var font = ModuleDrawing.Font(theme, 14 * textScale);
+        var gridLeft = 580 - Math.Max(ModuleDrawing.MeasureText("Acheté au réseau", font), ModuleDrawing.MeasureText("Vendu au réseau", font)) / 2;
+        var rightMostCarInk = -1;
+        for (var y = 362; y < 388; y++)
+            for (var x = 372; x < 700; x++)
+                if (a.GetPixel(x, y) != b.GetPixel(x, y)) rightMostCarInk = Math.Max(rightMostCarInk, x);
+
+        Assert.True(rightMostCarInk > 378, "le libellé de la voiture doit être dessiné");
+        Assert.True(rightMostCarInk < gridLeft, $"{themeName} : le libellé de la voiture va jusqu'à x {rightMostCarInk}, le texte du réseau commence à x {gridLeft:0}");
     }
 
     private static byte[] Bytes(SKBitmap bitmap) => bitmap.Bytes;

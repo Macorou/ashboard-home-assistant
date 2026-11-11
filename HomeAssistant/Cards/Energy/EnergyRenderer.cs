@@ -548,9 +548,10 @@ internal sealed class EnergyRenderer : IDisposable
 
     /// <summary>Largeur disponible autour d'un emplacement, dans l'espace 700 × 434 : jamais au-delà du bord de la carte.</summary>
     private static float MaxWidth(TextSlot slot) =>
-        slot.Centered
+        slot.MaxWidth ??
+        (slot.Centered
             ? 2 * Math.Min(slot.X, EnergyLayouts.Width - slot.X) - TextMargin
-            : EnergyLayouts.Width - slot.X - TextMargin;
+            : EnergyLayouts.Width - slot.X - TextMargin);
 
     private float MeasureReference(string text, float size) =>
         text.Length == 0 ? 0 : ModuleDrawing.MeasureText(text, _measureFont!) * size / RefFontSize;
